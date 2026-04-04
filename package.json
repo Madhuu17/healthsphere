@@ -1,18 +1,14 @@
 {
-  "name": "medlink-frontend",
+  "name": "healthsphere-root",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "dev": "cross-env NODE_OPTIONS=\"--no-warnings\" concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\""
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "cross-env": "^10.1.0"
   }
 }

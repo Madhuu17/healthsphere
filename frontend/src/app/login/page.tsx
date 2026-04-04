@@ -31,6 +31,7 @@ export default function LoginPage() {
       if (!res.ok) throw new Error(data.message || "Login failed");
       
       localStorage.setItem("user", JSON.stringify(data));
+      localStorage.setItem("isLoggedIn", "true");
       if (role === "patient") {
         router.push("/patient/dashboard");
       } else {

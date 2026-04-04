@@ -26,10 +26,12 @@ app.get('/', (req, res) => {
 import authRoutes    from './routes/authRoutes';
 import patientRoutes from './routes/patientRoutes';
 import doctorRoutes  from './routes/doctorRoutes';
+import aiRoutes      from './routes/aiRoutes';
 
 app.use('/api/auth',     authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/doctor',   doctorRoutes);
+app.use('/api/ai',       aiRoutes);
 
 const PORT = process.env.PORT || 5000;
 

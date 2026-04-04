@@ -1,0 +1,47 @@
+import { GoogleGenAI } from '@google/genai';
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+export interface SymptomCheckResult {
+  severity: number;
+  explanation: string;
+  recommendation: 'home' | 'consult';
+  possibleConditions: string[];
+}
+
+export async function checkSymptomsAI(symptoms: string): Promise<SymptomCheckResult> {
+  const prompt = `You are a medical AI assistant. A patient reports the following symptoms: "${symptoms}"
+
+Analyze these symptoms and respond ONLY with a valid JSON object (no markdown, no code blocks) in this exact format:
+{
+  "severity": <number from 1 to 10>,
+  "explanation": "<brief explanation of the symptoms and their implications>",
+  "recommendation": "<'home' if manageable at home, or 'consult' if a doctor visit is needed>",
+  "possibleConditions": ["<condition1>", "<condition2>"]
+}
+
+Rules:
+- severity 1-3: mild, home care sufficient
+- severity 4-6: moderate, monitor closely
+- severity 7-10: severe, consult a doctor immediately
+- recommendation must be exactly 'home' or 'consult'`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+  });
+
+  const text = (response.text ?? '').trim();
+
+  // Strip markdown code blocks if present
+  const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
+  const parsed: SymptomCheckResult = JSON.parse(cleaned);
+
+  // Validate severity range
+  parsed.severity = Math.min(10, Math.max(1, Math.round(parsed.severity)));
+  if (parsed.recommendation !== 'home' && parsed.recommendation !== 'consult') {
+    parsed.recommendation = parsed.severity >= 5 ? 'consult' : 'home';
+  }
+
+  return parsed;
+}

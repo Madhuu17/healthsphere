@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserRound, Calendar as CalendarIcon, CreditCard, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Smartphone, Landmark, Wallet } from "lucide-react";
+import { UserRound, Calendar as CalendarIcon, CreditCard, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Smartphone, Landmark, Wallet, Stethoscope } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const MOCK_BILLS = [
@@ -167,7 +167,7 @@ export default function PatientDashboard() {
       .catch(() => {});
   }, [router]);
 
-  const handleLogout = () => { localStorage.removeItem("user"); router.push("/login"); };
+  const handleLogout = () => { localStorage.removeItem("user"); localStorage.removeItem("isLoggedIn"); router.push("/login"); };
 
   const cityOptions = [...new Set(liveDoctors.map((d: any) => d.hospital).filter(Boolean))];
 
@@ -257,6 +257,13 @@ export default function PatientDashboard() {
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {NAV.map(navBtn)}
+          <div className="pt-3 mt-3 border-t border-slate-100">
+            <Link href="/patient/symptom-checker"
+              className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold text-left hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm hover:shadow-md">
+              <Stethoscope size={20} />
+              <span className="flex-1">Check Symptoms</span>
+            </Link>
+          </div>
         </nav>
         <div className="p-4 border-t border-slate-100">
           <div className="bg-slate-50 rounded-3xl p-3 border border-slate-100 flex flex-col gap-3">
