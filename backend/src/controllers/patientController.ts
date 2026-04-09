@@ -64,3 +64,49 @@ export const setupPatientProfile = async (req: Request, res: Response): Promise<
     else res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ── UPDATE PROFILE (from edit settings modal) ─────────────────────────────────
+export const updatePatientProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId } = req.params;
+    const {
+      name, contactNumber, email, address,
+      dob, gender, height, weight, bloodGroup,
+      emergencyContact,
+    } = req.body;
+
+    const updateFields: any = {};
+    if (name)          updateFields.name          = name;
+    if (contactNumber) updateFields.contactNumber  = contactNumber;
+    if (email)         updateFields.email          = email;
+    if (address !== undefined) updateFields.address = address;
+    if (dob)           updateFields.dob            = dob;
+    if (gender)        updateFields.gender         = gender;
+    if (height !== undefined && height !== '') updateFields.height = Number(height);
+    if (weight !== undefined && weight !== '') updateFields.weight = Number(weight);
+    if (bloodGroup !== undefined) updateFields.bloodGroup = bloodGroup;
+    if (emergencyContact?.name !== undefined)
+      updateFields['emergencyContact.name']  = emergencyContact.name;
+    if (emergencyContact?.phone !== undefined)
+      updateFields['emergencyContact.phone'] = emergencyContact.phone;
+    if (req.body.profilePicture !== undefined)
+      updateFields.profilePicture = req.body.profilePicture;
+
+    const patient = await Patient.findOneAndUpdate(
+      { patientId },
+      { $set: updateFields },
+      { new: true }
+    ).select('-passwordHash');
+
+    if (!patient) {
+      res.status(404).json({ message: 'Patient not found' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Profile updated.', profile: patient });
+  } catch (error) {
+    if (error instanceof Error) res.status(500).json({ message: error.message });
+    else res.status(500).json({ message: 'Server error' });
+  }
+};
+

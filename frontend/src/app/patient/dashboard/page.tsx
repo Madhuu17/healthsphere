@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserRound, Calendar as CalendarIcon, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Stethoscope, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { UserRound, Calendar as CalendarIcon, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Stethoscope, Sparkles, ChevronDown, ChevronUp, LayoutDashboard, Ruler, Weight, Droplets, Camera } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 
@@ -77,7 +77,7 @@ function calcAge(dob: string): number | null {
 
 export default function PatientDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab]           = useState("Profile");
+  const [activeTab, setActiveTab]           = useState("Overview");
   const [profile,   setProfile]             = useState<any>({ name:"Loading...", id:"...", bloodGroup:"-", dob:"", gender:"-", email:"...", contactNumber:"-", address: "...", emergencyContact: { name: "...", phone: "..." } });
   const [timeline,  setTimeline]            = useState<any[]>([]);
   const [messages,  setMessages]            = useState<any[]>([]);
@@ -117,6 +117,14 @@ export default function PatientDashboard() {
   const [editAddress, setEditAddress] = useState("");
   const [editEmergencyName, setEditEmergencyName] = useState("");
   const [editEmergencyPhone, setEditEmergencyPhone] = useState("");
+  // New editable health fields
+  const [editDob,        setEditDob]        = useState("");
+  const [editGender,     setEditGender]     = useState("");
+  const [editHeight,     setEditHeight]     = useState("");
+  const [editWeight,     setEditWeight]     = useState("");
+  const [editBloodGroup, setEditBloodGroup] = useState("");
+  const [editProfilePicture, setEditProfilePicture] = useState("");
+  const [editSaving,     setEditSaving]     = useState(false);
 
   // AI Summarize handler
   const handleSummarize = async (recordId: string) => {
@@ -162,9 +170,15 @@ export default function PatientDashboard() {
           setEditPhone(data.profile.contactNumber || "");
           setEditEmail(data.profile.email || "");
           setEditAddress(data.profile.address || "");
-          // New schema: emergencyContact is an object { name, phone }
           setEditEmergencyName(data.profile.emergencyContact?.name || "");
           setEditEmergencyPhone(data.profile.emergencyContact?.phone || "");
+          // Populate new health fields
+          setEditDob(data.profile.dob || "");
+          setEditGender(data.profile.gender || "");
+          setEditHeight(data.profile.height ? String(data.profile.height) : "");
+          setEditWeight(data.profile.weight ? String(data.profile.weight) : "");
+          setEditBloodGroup(data.profile.bloodGroup || "");
+          setEditProfilePicture(data.profile.profilePicture || "");
         }
         const tl = data.timeline?.length ? data.timeline : [];
         setTimeline(tl);
@@ -184,18 +198,40 @@ export default function PatientDashboard() {
         if (data.appointments?.length) {
           setScheduled(data.appointments.map((a:any) => new Date(a.date).getDate()));
         }
-        const newMsgs: any[] = [];
-        if (data.appointments?.length) {
-          data.appointments.slice(0,2).forEach((a:any, i:number) => {
-            newMsgs.push({ id:`ap-${i}`, type:"appointment", text:`Reminder: Appointment with ${a.doctorName} on ${a.date} at ${a.timeSlot}`, date: a.date, isNew: true });
-          });
-        }
-        if (data.timeline?.length) {
-          data.timeline.slice(0,2).forEach((t:any, i:number) => {
-            if (t.type === 'prescription') newMsgs.push({ id:`pr-${i}`, type:'prescription', text:`New Prescription: ${t.title}`, date: t.date?.slice(0,10), isNew: false });
-          });
-        }
-        setMessages(newMsgs);
+
+        // ── Fetch persistent notifications from DB ──────────────────────
+        fetch(`http://localhost:5000/api/notifications/${patientId}`)
+          .then(r => r.json())
+          .then(nd => {
+            if (nd.success && nd.notifications?.length) {
+              setMessages(nd.notifications.filter((n: any) => !n.isRead).map((n: any) => ({
+                _id: n._id,
+                id: n._id,
+                type: n.type,
+                text: n.text,
+                date: n.date || n.createdAt?.slice(0,10),
+                isNew: true,
+              })));
+            } else {
+              // Seed notifications from appointments if none exist
+              const seedMsgs: any[] = [];
+              if (data.appointments?.length) {
+                data.appointments.slice(0,2).forEach((a:any) => {
+                  seedMsgs.push({ type:'appointment', text:`Reminder: Appointment with ${a.doctorName} on ${a.date} at ${a.timeSlot}`, date: a.date });
+                });
+              }
+              // Create them in DB
+              seedMsgs.forEach(msg => {
+                fetch('http://localhost:5000/api/notifications', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ patientId, ...msg }),
+                }).catch(() => {});
+              });
+              setMessages(seedMsgs.map((m, i) => ({ ...m, id: `seed-${i}`, isNew: true })));
+            }
+          })
+          .catch(() => {});
       })
       .catch(() => {
         setProfile({ name:user.name||"Patient", id:patientId, email:user.email, bloodGroup:"", dob:"", gender:"", contactNumber:"N/A", address:"N/A", emergencyContact:{name:"N/A",phone:"N/A"} });
@@ -264,8 +300,28 @@ export default function PatientDashboard() {
     finally { setBookingLoading(false); }
   };
 
+  // ── Mark single notification read (persistent) ──────────────────────────────
+  const markOneRead = async (msg: any) => {
+    // Optimistic UI update: instantly hide read notification
+    setMessages(prev => prev.filter(m => m.id !== msg.id));
+    // Persist to DB if we have a real _id
+    if (msg._id) {
+      fetch(`http://localhost:5000/api/notifications/${msg._id}/read`, { method: 'PUT' }).catch(() => {});
+    }
+  };
+
+  // ── Mark ALL notifications read (persistent) ─────────────────────────────────
+  const markAllRead = async () => {
+    const userStr = localStorage.getItem("user");
+    const patientId = userStr ? JSON.parse(userStr).id : null;
+    setMessages([]); // empty them instantly
+    if (patientId) {
+      fetch(`http://localhost:5000/api/notifications/${patientId}/read-all`, { method: 'PUT' }).catch(() => {});
+    }
+  };
+
   const NAV = [
-    { name:"Profile",        icon:UserRound },
+    { name:"Overview",       icon:LayoutDashboard },
     { name:"Appointments",   icon:CalendarIcon },
     { name:"Medical Records",icon:FileText },
     { name:"Medications",    icon:Pill },
@@ -315,8 +371,12 @@ export default function PatientDashboard() {
         <div className="p-4 border-t border-slate-100">
           <div className="bg-slate-50 rounded-3xl p-3 border border-slate-100 flex flex-col gap-3">
             <div className="flex items-center gap-3 px-1">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white text-sm font-black shadow-inner">
-                {profile.name?.[0]?.toUpperCase() || "P"}
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white text-sm font-black shadow-inner overflow-hidden">
+                {profile.profilePicture ? (
+                  <img src={profile.profilePicture} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  profile.name?.[0]?.toUpperCase() || "P"
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-black text-slate-800 truncate leading-tight">{profile.name}</p>
@@ -365,11 +425,11 @@ export default function PatientDashboard() {
                     className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-4 z-50">
                     <div className="flex items-center justify-between mb-4 px-2">
                       <h4 className="font-bold text-slate-800">Messages & Notifications</h4>
-                      <button onClick={() => setMessages(messages.map(m => ({...m, isNew: false})))} className="text-[10px] font-bold text-teal-600 uppercase tracking-widest">Mark All Read</button>
+                      <button onClick={() => markAllRead()} className="text-[10px] font-bold text-teal-600 uppercase tracking-widest">Mark All Read</button>
                     </div>
                     <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                       {messages.map(m => (
-                        <div key={m.id} className={`p-3 rounded-2xl border transition-all ${m.isNew ? "bg-teal-50/50 border-teal-100" : "bg-slate-50 border-slate-100"}`}>
+                        <div key={m.id} onClick={() => markOneRead(m)} className={`p-3 rounded-2xl border transition-all cursor-pointer ${m.isNew ? "bg-teal-50/50 border-teal-100 hover:bg-teal-50" : "bg-slate-50 border-slate-100 opacity-75"}`}>
                           <div className="flex items-start gap-3">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                               m.type === "appointment" ? "bg-teal-100 text-teal-600" : "bg-purple-100 text-purple-600"
@@ -389,25 +449,41 @@ export default function PatientDashboard() {
                 )}
               </AnimatePresence>
             </div>
-            <button onClick={() => setShowSettings(true)} className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 border-2 border-white shadow-sm ml-1 flex items-center justify-center text-white font-bold text-sm hover:scale-110 transition-transform">
-              {profile.name?.[0]?.toUpperCase() || "P"}
+            <button onClick={() => setShowSettings(true)} className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 border-2 border-white shadow-sm ml-1 flex items-center justify-center text-white font-bold text-sm hover:scale-110 transition-transform overflow-hidden">
+              {profile.profilePicture ? (
+                <img src={profile.profilePicture} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                profile.name?.[0]?.toUpperCase() || "P"
+              )}
             </button>
           </div>
         </header>
 
         {/* Scrollable page */}
         <div className="flex-1 overflow-y-auto px-8 py-8">
-          <h2 className="text-3xl font-black text-slate-800 mb-8 tracking-tight">{activeTab}</h2>
+          <h2 className="text-3xl font-black text-slate-800 mb-8 tracking-tight flex items-center gap-3">
+            {activeTab === "Overview" && <LayoutDashboard size={28} className="text-teal-500" />}
+            {activeTab === "Appointments" && <CalendarIcon size={28} className="text-teal-500" />}
+            {activeTab === "Medical Records" && <FileText size={28} className="text-teal-500" />}
+            {activeTab === "Medications" && <Pill size={28} className="text-teal-500" />}
+            {activeTab === "Timeline" && <Activity size={28} className="text-teal-500" />}
+            {activeTab === "Messages" && <Mail size={28} className="text-teal-500" />}
+            {activeTab}
+          </h2>
 
-          {/* ═══════════ PROFILE TAB ═══════════ */}
-          {activeTab === "Profile" && (
+          {/* ═══════════ OVERVIEW TAB ═══════════ */}
+          {activeTab === "Overview" && (
             <div className="space-y-8 max-w-[1400px]">
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                 {/* Profile Card */}
                 <div className="xl:col-span-5 bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center sm:items-start gap-8">
                   <div className="relative shrink-0">
-                    <div className="w-32 h-32 rounded-full bg-gradient-to-br from-teal-50 to-teal-100 border-4 border-white shadow-lg flex items-center justify-center">
-                      <UserRound size={54} className="text-teal-300"/>
+                    <div className="w-32 h-32 rounded-full bg-gradient-to-br from-teal-50 to-teal-100 border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
+                      {profile.profilePicture ? (
+                        <img src={profile.profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserRound size={54} className="text-teal-300"/>
+                      )}
                     </div>
                     <button onClick={() => setShowSettings(true)} className="absolute bottom-1 right-1 w-9 h-9 bg-teal-500 text-white rounded-full flex items-center justify-center border-2 border-white shadow hover:bg-teal-600 transition-colors">
                       <Edit2 size={14}/>
@@ -889,14 +965,18 @@ export default function PatientDashboard() {
             <div className="max-w-[1000px] mx-auto space-y-4">
               <div className="flex items-center justify-between bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800">Messages & Inbox</h3>
-                  <p className="text-slate-500 text-sm">Manage your specialist communications and medical alerts.</p>
+                  <h3 className="text-xl font-bold text-slate-800">Messages &amp; Inbox</h3>
+                  <p className="text-slate-500 text-sm">Click a message to mark it as read.</p>
                 </div>
-                <button onClick={() => setMessages(messages.map(m => ({...m, isNew: false})))} className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">Mark All as Read</button>
+                <button onClick={markAllRead} className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">Mark All as Read</button>
               </div>
               <div className="grid gap-3">
                 {messages.length > 0 ? messages.map(m => (
-                  <div key={m.id} className={`p-5 rounded-3xl border transition-all ${m.isNew ? "bg-white border-teal-200 shadow-xl shadow-teal-500/5 ring-1 ring-teal-50" : "bg-white border-slate-100 opacity-80"}`}>
+                  <div key={m.id} onClick={() => markOneRead(m)} className={`p-5 rounded-3xl border transition-all cursor-pointer group ${
+                    m.isNew
+                      ? "bg-white border-teal-200 shadow-xl shadow-teal-500/5 ring-1 ring-teal-50 hover:shadow-teal-500/10"
+                      : "bg-white border-slate-100 opacity-70 hover:opacity-100"
+                  }`}>
                     <div className="flex items-start gap-5">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
                         m.type === "appointment" ? "bg-teal-100 text-teal-600" :
@@ -914,7 +994,10 @@ export default function PatientDashboard() {
                         </div>
                         <p className={`text-base font-semibold leading-snug ${m.isNew ? "text-slate-800" : "text-slate-600"}`}>{m.text}</p>
                       </div>
-                      {m.isNew && <div className="w-3 h-3 bg-orange-500 rounded-full mt-2 shadow-lg shadow-orange-500/50"></div>}
+                      {m.isNew
+                        ? <span className="flex items-center gap-1.5 text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-full">● Unread — click to mark read</span>
+                        : <span className="text-[10px] font-semibold text-slate-400">✓ Read</span>
+                      }
                     </div>
                   </div>
                 )) : (
@@ -936,13 +1019,45 @@ export default function PatientDashboard() {
         {showSettings && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
             <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:0.95}}
-              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl relative">
+              className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl relative">
               <button onClick={()=>setShowSettings(false)} className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 p-2 rounded-full text-slate-500 transition-colors"><X size={18}/></button>
-              <div className="flex items-center gap-3 mb-7">
+              <div className="flex items-center gap-3 mb-6">
                 <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center"><Settings size={24}/></div>
-                <h2 className="text-xl font-bold text-slate-800">Edit Profile Settings</h2>
+                <h2 className="text-xl font-bold text-slate-800">Edit Profile</h2>
               </div>
-              <div className="space-y-4 mb-6 overflow-y-auto max-h-[60vh] pr-2">
+
+              <div className="space-y-4 mb-6 overflow-y-auto max-h-[65vh] pr-2">
+                
+                {/* Profile Picture Upload */}
+                <div className="flex flex-col items-center justify-center mb-6">
+                  <div className="relative group cursor-pointer">
+                    <div className="w-24 h-24 rounded-full bg-slate-100 border-4 border-white shadow-md flex items-center justify-center overflow-hidden">
+                      {editProfilePicture ? (
+                        <img src={editProfilePicture} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserRound size={32} className="text-slate-300" />
+                      )}
+                    </div>
+                    <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Camera size={18} className="text-white mb-1" />
+                      <span className="text-[10px] text-white font-bold">Upload</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setEditProfilePicture(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                    </label>
+                  </div>
+                  {editProfilePicture && (
+                    <button onClick={() => setEditProfilePicture("")} className="text-[10px] text-red-500 font-bold mt-2 hover:underline">Remove Picture</button>
+                  )}
+                </div>
+
+                {/* Contact Info */}
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Contact Information</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
@@ -953,16 +1068,80 @@ export default function PatientDashboard() {
                     <input type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"/>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mobile Number</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mobile</label>
                     <input type="tel" value={editPhone} onChange={e=>setEditPhone(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"/>
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Residential Address</label>
+                    <textarea value={editAddress} onChange={e=>setEditAddress(e.target.value)} rows={2} className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"></textarea>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Residential Address</label>
-                  <textarea value={editAddress} onChange={e=>setEditAddress(e.target.value)} rows={3} className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"></textarea>
+
+                {/* Health Info */}
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Health Information</p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Birth</label>
+                      <input type="date" value={editDob} onChange={e=>setEditDob(e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"/>
+                      {editDob && calcAge(editDob) !== null && (
+                        <p className="mt-1 text-teal-600 text-xs font-bold">→ Age: {calcAge(editDob)} years (auto-calculated)</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["Male","Female","Other"].map(g => (
+                          <button key={g} type="button" onClick={() => setEditGender(g)}
+                            className={`py-2.5 rounded-xl text-sm font-bold border transition-all ${editGender===g ? "bg-teal-500 border-teal-400 text-white" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-teal-300"}`}
+                          >{g}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Height (cm)</label>
+                        <div className="relative">
+                          <Ruler size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                          <input type="number" value={editHeight} onChange={e=>setEditHeight(e.target.value)}
+                            placeholder="e.g. 170" min="50" max="250"
+                            className="w-full pl-8 pr-3 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"/>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Weight (kg)</label>
+                        <div className="relative">
+                          <Weight size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                          <input type="number" value={editWeight} onChange={e=>setEditWeight(e.target.value)}
+                            placeholder="e.g. 65" min="10" max="300"
+                            className="w-full pl-8 pr-3 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 font-medium text-slate-700 bg-slate-50 transition-all"/>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Blood Group</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {["A+","A-","B+","B-","O+","O-","AB+","AB-"].map(bg => (
+                          <button key={bg} type="button"
+                            onClick={() => setEditBloodGroup(editBloodGroup === bg ? "" : bg)}
+                            className={`py-2 rounded-xl text-xs font-bold border transition-all ${editBloodGroup===bg ? "bg-red-500 border-red-400 text-white" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-red-300"}`}
+                          >
+                            <Droplets size={10} className="inline mr-0.5 opacity-70"/>{bg}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="border-t border-slate-100 pt-4 mt-4">
-                  <p className="text-sm font-bold text-slate-800 mb-3">Emergency Contact Info</p>
+
+                {/* Emergency Contact */}
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Emergency Contact</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Contact Name</label>
@@ -974,24 +1153,44 @@ export default function PatientDashboard() {
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-slate-400 font-medium">Blood group, age, and medical history are locked and can only be updated by authorized medical staff.</p>
               </div>
-              <button onClick={()=>{
-                setProfile((p:any)=>({...p,
-                  name:editName,
-                  contactNumber:editPhone,
-                  email:editEmail,
-                  address:editAddress,
-                  emergencyContactName:editEmergencyName,
-                  emergencyContactPhone:editEmergencyPhone
-                }));
-                const u=JSON.parse(localStorage.getItem("user")||"{}");
-                localStorage.setItem("user",JSON.stringify({...u,name:editName, email:editEmail}));
-                setShowSettings(false);
-              }} className="w-full bg-teal-500 text-white font-bold py-3.5 rounded-xl hover:bg-teal-600 transition-colors shadow-sm">Save Profile Changes</button>
+
+              <button
+                disabled={editSaving}
+                onClick={async () => {
+                  setEditSaving(true);
+                  const userStr = localStorage.getItem("user");
+                  const patientId = userStr ? JSON.parse(userStr).id : null;
+                  try {
+                    const res = await fetch(`http://localhost:5000/api/patients/${patientId}/profile`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        name: editName, contactNumber: editPhone, email: editEmail,
+                        address: editAddress, dob: editDob, gender: editGender,
+                        height: editHeight, weight: editWeight, bloodGroup: editBloodGroup,
+                        emergencyContact: { name: editEmergencyName, phone: editEmergencyPhone },
+                        profilePicture: editProfilePicture,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.profile) {
+                      setProfile({ ...data.profile, id: data.profile.patientId });
+                    }
+                    const u = JSON.parse(localStorage.getItem("user") || "{}");
+                    localStorage.setItem("user", JSON.stringify({ ...u, name: editName, email: editEmail }));
+                  } catch (e) {}
+                  setEditSaving(false);
+                  setShowSettings(false);
+                }}
+                className="w-full bg-teal-500 disabled:bg-teal-300 text-white font-bold py-3.5 rounded-xl hover:bg-teal-600 transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                {editSaving ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Saving...</> : "Save Profile Changes"}
+              </button>
             </motion.div>
           </div>
         )}
+
 
         {/* Book Appointment Modal */}
         {showAppt && (

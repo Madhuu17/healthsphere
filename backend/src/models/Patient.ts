@@ -21,6 +21,7 @@ export interface IPatient extends Document {
 
   // Optional extra info
   address?: string;
+  profilePicture?: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +46,7 @@ const PatientSchema: Schema = new Schema(
       phone: { type: String, default: '' },
     },
     address: { type: String, default: '' },
+    profilePicture: { type: String, default: '' },
   },
   { timestamps: true }
 );
