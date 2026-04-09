@@ -92,6 +92,10 @@ export default function DoctorDashboard() {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     if (!user || user.role !== "doctor") { router.push("/login"); return; }
+
+    // ── First-login guard ────────────────────────────────────────────────────
+    if (!user.isProfileCompleted) { router.push("/doctor/setup-profile"); return; }
+
     setDoctor(user);
     fetchSchedule(user.id);
     fetchProfile(user.id);

@@ -27,12 +27,17 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password, role })
       });
       const data = await res.json();
-      
+
       if (!res.ok) throw new Error(data.message || "Login failed");
-      
-      localStorage.setItem("user", JSON.stringify(data));
+
+      // Save user info (includes isProfileCompleted)
+      localStorage.setItem("user", JSON.stringify({ ...data, role }));
       localStorage.setItem("isLoggedIn", "true");
-      if (role === "patient") {
+
+      // 🔑 First-time login → go to profile setup; else go to dashboard
+      if (!data.isProfileCompleted) {
+        router.push(`/${role}/setup-profile`);
+      } else if (role === "patient") {
         router.push("/patient/dashboard");
       } else {
         router.push("/doctor/dashboard");

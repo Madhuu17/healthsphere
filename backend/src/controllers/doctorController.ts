@@ -188,3 +188,40 @@ export const addPatientRecord = async (req: Request, res: Response): Promise<voi
     else res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ─── Doctor profile setup (first login) ──────────────────────────────────────
+export const setupDoctorProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId } = req.params;
+    const { specialization, hospital, qualification, designation, experience, gender } = req.body;
+
+    if (!specialization || !hospital || !qualification || !designation || !experience || !gender) {
+      res.status(400).json({ message: 'All fields are required for profile setup.' });
+      return;
+    }
+
+    const doctor = await Doctor.findOneAndUpdate(
+      { doctorId },
+      {
+        specialization,
+        hospital,
+        qualification,
+        designation,
+        experience: Number(experience),
+        gender,
+        isProfileCompleted: true,
+      },
+      { new: true }
+    ).select('-passwordHash');
+
+    if (!doctor) {
+      res.status(404).json({ message: 'Doctor not found' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Doctor profile setup complete.', profile: doctor });
+  } catch (error) {
+    if (error instanceof Error) res.status(500).json({ message: error.message });
+    else res.status(500).json({ message: 'Server error' });
+  }
+};

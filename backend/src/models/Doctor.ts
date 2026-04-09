@@ -5,31 +5,41 @@ export interface IDoctor extends Document {
   name: string;
   email: string;
   passwordHash: string;
-  specialization: string;
-  hospital: string;
   contactNumber: string;
-  qualification: string;
-  designation: string;
-  experience: number;
-  age: number;
-  blockedDates: string[]; // ISO date strings
+
+  // Profile setup fields (filled on first login)
+  isProfileCompleted: boolean;
+  specialization?: string;
+  hospital?: string;
+  qualification?: string;
+  designation?: string;
+  experience?: number;
+  gender?: string;
+
+  blockedDates: string[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-const DoctorSchema: Schema = new Schema({
-  doctorId:       { type: String, required: true, unique: true },
-  name:           { type: String, required: true },
-  email:          { type: String, required: true, unique: true },
-  passwordHash:   { type: String, required: true },
-  specialization: { type: String, required: true },
-  hospital:       { type: String, required: true },
-  contactNumber:  { type: String, required: true },
-  qualification:  { type: String, default: '' },
-  designation:    { type: String, default: '' },
-  experience:     { type: Number, default: 0 },
-  age:            { type: Number, default: 0 },
-  blockedDates:   [{ type: String }]
-}, { timestamps: true });
+const DoctorSchema: Schema = new Schema(
+  {
+    doctorId:      { type: String, required: true, unique: true },
+    name:          { type: String, required: true },
+    email:         { type: String, required: true, unique: true },
+    passwordHash:  { type: String, required: true },
+    contactNumber: { type: String, required: true },
+
+    isProfileCompleted: { type: Boolean, default: false },
+    specialization: { type: String, default: '' },
+    hospital:       { type: String, default: '' },
+    qualification:  { type: String, default: '' },
+    designation:    { type: String, default: '' },
+    experience:     { type: Number, default: 0 },
+    gender:         { type: String, default: '' },
+
+    blockedDates: [{ type: String }],
+  },
+  { timestamps: true }
+);
 
 export default mongoose.model<IDoctor>('Doctor', DoctorSchema);

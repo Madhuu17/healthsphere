@@ -9,7 +9,8 @@ import {
   getAvailableSlots,
   requestPatientAccess,
   verifyPatientAccess,
-  addPatientRecord
+  addPatientRecord,
+  setupDoctorProfile,
 } from '../controllers/doctorController';
 
 const router = express.Router();
@@ -25,5 +26,8 @@ router.post('/verify',             verifyPatientAccess);
 
 // Multipart form with up to 5 image/file attachments
 router.post('/add-record', upload.array('attachments', 5), addPatientRecord);
+
+// First-login profile setup
+router.put('/setup/:doctorId', setupDoctorProfile);
 
 export default router;

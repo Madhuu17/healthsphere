@@ -4,9 +4,10 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import connectDB from './config/db';
+import { startReminderScheduler } from './utils/reminderScheduler';
 
 dotenv.config();
-connectDB();
+connectDB().then(() => startReminderScheduler());
 
 const app = express();
 
@@ -29,6 +30,7 @@ import doctorRoutes        from './routes/doctorRoutes';
 import aiRoutes            from './routes/aiRoutes';
 import appointmentRoutes   from './routes/appointmentRoutes';
 import medicalRecordRoutes from './routes/medicalRecordRoutes';
+import reminderRoutes      from './routes/reminderRoutes';
 
 app.use('/api/auth',            authRoutes);
 app.use('/api/patients',        patientRoutes);
@@ -36,6 +38,7 @@ app.use('/api/doctor',          doctorRoutes);
 app.use('/api/ai',              aiRoutes);
 app.use('/api/appointments',    appointmentRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
+app.use('/api/reminders',       reminderRoutes);
 
 const PORT = process.env.PORT || 5000;
 

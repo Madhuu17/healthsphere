@@ -16,6 +16,7 @@
     "@google/genai": "^1.48.0",
     "@google/generative-ai": "^0.24.1",
     "@types/multer": "^2.1.0",
+    "@types/node-cron": "^3.0.11",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -24,7 +25,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb-memory-server": "^11.0.1",
     "mongoose": "^9.3.3",
-    "multer": "^2.1.1"
+    "multer": "^2.1.1",
+    "node-cron": "^4.2.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -63,10 +63,22 @@ const CITY_DATA: Record<string, { hospitals: string[]; doctors: string[]; slots:
   }
 };
 
+// ── Helper: calculate age from DOB ──────────────────────────────────────────
+function calcAge(dob: string): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
 export default function PatientDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab]           = useState("Profile");
-  const [profile,   setProfile]             = useState<any>({ name:"Loading...", id:"...", bloodGroup:"-", age:"-", gender:"-", email:"...", contactNumber:"-", address: "...", emergencyContactName: "...", emergencyContactPhone: "..." });
+  const [profile,   setProfile]             = useState<any>({ name:"Loading...", id:"...", bloodGroup:"-", dob:"", gender:"-", email:"...", contactNumber:"-", address: "...", emergencyContact: { name: "...", phone: "..." } });
   const [timeline,  setTimeline]            = useState<any[]>([]);
   const [messages,  setMessages]            = useState<any[]>([]);
   const [showMessages, setShowMessages]     = useState(false);
@@ -134,9 +146,13 @@ export default function PatientDashboard() {
     const userStr = localStorage.getItem("user");
     if (!userStr) { router.push("/login"); return; }
     const user = JSON.parse(userStr);
+
+    // ── First-login guard ──────────────────────────────────────────────────
+    if (!user.isProfileCompleted) { router.push("/patient/setup-profile"); return; }
+
     const patientId = user.id || user.patientId;
     setEditName(user.name || "");
-    // Fetch from the new medical-records endpoint to get aiSummary fields
+
     fetch(`http://localhost:5000/api/patients/${patientId}/dashboard`)
       .then(r => r.json())
       .then(data => {
@@ -146,19 +162,17 @@ export default function PatientDashboard() {
           setEditPhone(data.profile.contactNumber || "");
           setEditEmail(data.profile.email || "");
           setEditAddress(data.profile.address || "");
-          setEditEmergencyName(data.profile.emergencyContactName || "");
-          setEditEmergencyPhone(data.profile.emergencyContactPhone || "");
+          // New schema: emergencyContact is an object { name, phone }
+          setEditEmergencyName(data.profile.emergencyContact?.name || "");
+          setEditEmergencyPhone(data.profile.emergencyContact?.phone || "");
         }
-        // Also fetch full records with aiSummary from dedicated endpoint
         const tl = data.timeline?.length ? data.timeline : [];
         setTimeline(tl);
-        // Then enrich with aiSummary from medical-records endpoint
         if (patientId) {
           fetch(`http://localhost:5000/api/medical-records/patient/${patientId}`)
             .then(r => r.json())
             .then(rec => {
               if (rec.success && rec.records?.length) {
-                // Merge aiSummary into existing timeline
                 setTimeline(prev => prev.map(item => {
                   const match = rec.records.find((r: any) => r._id === item._id || r._id?.toString() === item._id?.toString());
                   return match ? { ...item, aiSummary: match.aiSummary, summaryGeneratedAt: match.summaryGeneratedAt } : item;
@@ -167,13 +181,9 @@ export default function PatientDashboard() {
             })
             .catch(() => {});
         }
-
-        // Load appointments into schedule
         if (data.appointments?.length) {
           setScheduled(data.appointments.map((a:any) => new Date(a.date).getDate()));
         }
-        
-        // Generate notifications from real data
         const newMsgs: any[] = [];
         if (data.appointments?.length) {
           data.appointments.slice(0,2).forEach((a:any, i:number) => {
@@ -188,15 +198,12 @@ export default function PatientDashboard() {
         setMessages(newMsgs);
       })
       .catch(() => {
-        setProfile({ name:user.name||"Patient", id:patientId, email:user.email, bloodGroup:"N/A", age:"N/A", gender:"N/A", contactNumber:"N/A", address: "N/A", emergencyContactName: "N/A", emergencyContactPhone: "N/A" });
+        setProfile({ name:user.name||"Patient", id:patientId, email:user.email, bloodGroup:"", dob:"", gender:"", contactNumber:"N/A", address:"N/A", emergencyContact:{name:"N/A",phone:"N/A"} });
         setEditName(user.name||"");
         setEditEmail(user.email||"");
-        setMessages([
-          { id: 1, type: "appointment", text: "Reminder: Your upcoming appointment.", date: "Oct 31", isNew: true }
-        ]);
+        setMessages([{ id: 1, type: "appointment", text: "Reminder: Your upcoming appointment.", date: "Today", isNew: true }]);
       });
 
-    // Fetch doctors for booking
     fetch("http://localhost:5000/api/doctor/all")
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLiveDoctors(data); })
@@ -292,7 +299,12 @@ export default function PatientDashboard() {
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {NAV.map(navBtn)}
-          <div className="pt-3 mt-3 border-t border-slate-100">
+        <div className="pt-3 mt-3 border-t border-slate-100 space-y-1">
+            <Link href="/patient/medicine-reminders"
+              className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-orange-50 hover:text-orange-600 font-semibold text-left transition-all">
+              <Pill size={20} className="text-orange-400" />
+              <span className="flex-1">Medicine Reminders</span>
+            </Link>
             <Link href="/patient/symptom-checker"
               className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold text-left hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm hover:shadow-md">
               <Stethoscope size={20} />
@@ -409,14 +421,35 @@ export default function PatientDashboard() {
                       </div>
                       <span className="bg-teal-500 text-white text-xs font-bold px-3 py-1 rounded-lg">Active</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm mt-4">
+
+                    {/* Key info chips */}
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {profile.dob && (
+                        <span className="bg-teal-50 text-teal-700 text-xs font-bold px-3 py-1 rounded-full border border-teal-100">
+                          Age: {calcAge(profile.dob) ?? "—"} yrs
+                        </span>
+                      )}
+                      {profile.gender && (
+                        <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1 rounded-full border border-blue-100">
+                          {profile.gender}
+                        </span>
+                      )}
+                      {profile.bloodGroup && (
+                        <span className="bg-red-50 text-red-700 text-xs font-bold px-3 py-1 rounded-full border border-red-100">
+                          🩸 {profile.bloodGroup}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm mt-2">
                       <div className="col-span-2"><span className="text-slate-500">Residential Address</span><p className="font-semibold text-slate-800">{profile.address || "Not provided"}</p></div>
-                      <div><span className="text-slate-500">Emergency Contact</span><p className="font-semibold text-slate-800">{profile.emergencyContactName || "N/A"}</p></div>
-                      <div><span className="text-slate-500">Emergency Phone</span><p className="font-semibold text-teal-600">{profile.emergencyContactPhone || "N/A"}</p></div>
+                      <div><span className="text-slate-500">Emergency Contact</span><p className="font-semibold text-slate-800">{profile.emergencyContact?.name || "N/A"}</p></div>
+                      <div><span className="text-slate-500">Emergency Phone</span><p className="font-semibold text-teal-600">{profile.emergencyContact?.phone || "N/A"}</p></div>
                     </div>
                     <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 text-sm">
                       <div><span className="text-teal-500 font-bold">Chart ID: </span><span className="text-slate-700 font-semibold">{profile.id}</span></div>
-                      <div><span className="text-teal-500 font-bold">Blood Group: </span><span className="text-slate-700 font-semibold">{profile.bloodGroup}</span></div>
+                      {profile.height && <div><span className="text-teal-500 font-bold">Height: </span><span className="text-slate-700 font-semibold">{profile.height} cm</span></div>}
+                      {profile.weight && <div><span className="text-teal-500 font-bold">Weight: </span><span className="text-slate-700 font-semibold">{profile.weight} kg</span></div>}
                     </div>
                   </div>
                 </div>
