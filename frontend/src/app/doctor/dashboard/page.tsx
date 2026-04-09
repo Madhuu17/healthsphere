@@ -26,7 +26,12 @@ function getWeekDates(offset = 0) {
   });
 }
 
-function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
+function toYMD(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
 const TYPE_META: Record<string, { color: string; bg: string; icon: any }> = {
   prescription: { color: "text-purple-600", bg: "bg-purple-100", icon: Pill },
