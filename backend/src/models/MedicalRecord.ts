@@ -8,6 +8,8 @@ export interface IMedicalRecord extends Document {
   description: string;
   date: Date;
   attachments?: string[];
+  aiSummary: string | null;
+  summaryGeneratedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,7 +21,9 @@ const MedicalRecordSchema: Schema = new Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   date: { type: Date, required: true, default: Date.now },
-  attachments: [{ type: String }]
+  attachments: [{ type: String }],
+  aiSummary: { type: String, default: null },
+  summaryGeneratedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 export default mongoose.model<IMedicalRecord>('MedicalRecord', MedicalRecordSchema);

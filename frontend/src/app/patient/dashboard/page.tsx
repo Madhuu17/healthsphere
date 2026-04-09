@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserRound, Calendar as CalendarIcon, CreditCard, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Smartphone, Landmark, Wallet, Stethoscope } from "lucide-react";
+import { UserRound, Calendar as CalendarIcon, CreditCard, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Smartphone, Landmark, Wallet, Stethoscope, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const MOCK_BILLS = [
@@ -81,6 +81,11 @@ export default function PatientDashboard() {
   const [showAppt,      setShowAppt]        = useState(false);
   const [showCalendar,  setShowCalendar]    = useState(false);
   const [showRecord,    setShowRecord]      = useState<any>(null);
+
+  // AI Summarizer state
+  const [summarizingId,  setSummarizingId]  = useState<string | null>(null);
+  const [summaryError,   setSummaryError]   = useState<string | null>(null);
+  const [expandedSummary,setExpandedSummary]= useState<string | null>(null);
   const [apptStep,      setApptStep]        = useState(1);
   const [payBill,       setPayBill]         = useState<any>(null);
   const [payStep,       setPayStep]         = useState(1);
@@ -110,12 +115,37 @@ export default function PatientDashboard() {
   const [editEmergencyName, setEditEmergencyName] = useState("");
   const [editEmergencyPhone, setEditEmergencyPhone] = useState("");
 
+  // AI Summarize handler
+  const handleSummarize = async (recordId: string) => {
+    setSummarizingId(recordId);
+    setSummaryError(null);
+    try {
+      const res = await fetch(`http://localhost:5000/api/medical-records/summarize/${recordId}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Summarization failed");
+      // Update the timeline item with the returned summary
+      setTimeline(prev => prev.map(item =>
+        (item._id === recordId || item._id?.toString() === recordId)
+          ? { ...item, aiSummary: data.aiSummary, summaryGeneratedAt: data.summaryGeneratedAt }
+          : item
+      ));
+      setExpandedSummary(recordId);
+    } catch (err: any) {
+      setSummaryError(err.message);
+    } finally {
+      setSummarizingId(null);
+    }
+  };
+
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     if (!userStr) { router.push("/login"); return; }
     const user = JSON.parse(userStr);
     const patientId = user.id || user.patientId;
     setEditName(user.name || "");
+    // Fetch from the new medical-records endpoint to get aiSummary fields
     fetch(`http://localhost:5000/api/patients/${patientId}/dashboard`)
       .then(r => r.json())
       .then(data => {
@@ -128,7 +158,24 @@ export default function PatientDashboard() {
           setEditEmergencyName(data.profile.emergencyContactName || "");
           setEditEmergencyPhone(data.profile.emergencyContactPhone || "");
         }
-        setTimeline(data.timeline?.length ? data.timeline : []);
+        // Also fetch full records with aiSummary from dedicated endpoint
+        const tl = data.timeline?.length ? data.timeline : [];
+        setTimeline(tl);
+        // Then enrich with aiSummary from medical-records endpoint
+        if (patientId) {
+          fetch(`http://localhost:5000/api/medical-records/patient/${patientId}`)
+            .then(r => r.json())
+            .then(rec => {
+              if (rec.success && rec.records?.length) {
+                // Merge aiSummary into existing timeline
+                setTimeline(prev => prev.map(item => {
+                  const match = rec.records.find((r: any) => r._id === item._id || r._id?.toString() === item._id?.toString());
+                  return match ? { ...item, aiSummary: match.aiSummary, summaryGeneratedAt: match.summaryGeneratedAt } : item;
+                }));
+              }
+            })
+            .catch(() => {});
+        }
 
         // Load appointments into schedule
         if (data.appointments?.length) {
@@ -573,6 +620,25 @@ export default function PatientDashboard() {
           {/* ═══════════ MEDICAL RECORDS TAB ═══════════ */}
           {activeTab === "Medical Records" && (
             <div className="space-y-4 max-w-[1400px]">
+              {/* AI Summarizer Feature Banner */}
+              <div className="bg-gradient-to-r from-violet-500 to-purple-600 rounded-2xl p-4 flex items-center gap-4 shadow-lg shadow-purple-500/20">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+                  <Sparkles size={20} className="text-white"/>
+                </div>
+                <div className="flex-1">
+                  <p className="text-white font-bold text-sm">AI Medical Summarizer</p>
+                  <p className="text-purple-100 text-xs">Click "Summarize" on any record to get a simple, patient-friendly explanation — generated once and saved permanently.</p>
+                </div>
+              </div>
+
+              {summaryError && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-3 flex items-center gap-3">
+                  <AlertCircle size={16} className="text-red-500 shrink-0"/>
+                  <p className="text-red-600 text-sm font-medium">{summaryError}</p>
+                  <button onClick={() => setSummaryError(null)} className="ml-auto text-red-400 hover:text-red-600"><X size={14}/></button>
+                </div>
+              )}
+
               {timeline.length === 0 ? (
                 <div className="bg-white rounded-3xl p-12 text-center border border-slate-100">
                   <FileText size={48} className="mx-auto text-slate-200 mb-4"/>
@@ -580,29 +646,101 @@ export default function PatientDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {timeline.map((rec,i) => (
-                    <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex items-start gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        rec.type==="xray"?"bg-blue-100 text-blue-600":
-                        rec.type==="prescription"?"bg-purple-100 text-purple-600":
-                        rec.type==="lab_report"?"bg-red-100 text-red-600":"bg-teal-100 text-teal-600"
+                  {timeline.map((rec, i) => {
+                    const recId = rec._id?.toString();
+                    const hasSummary = !!rec.aiSummary;
+                    const isLoading = summarizingId === recId;
+                    const isExpanded = expandedSummary === recId;
+                    const canSummarize = (rec.type === "prescription" || rec.type === "lab_report" || rec.type === "xray" || rec.type === "vaccination") && !hasSummary;
+                    const typeColor =
+                      rec.type === "xray" ? { bg: "bg-blue-100", text: "text-blue-600", badge: "bg-blue-50 text-blue-600" } :
+                      rec.type === "prescription" ? { bg: "bg-purple-100", text: "text-purple-600", badge: "bg-purple-50 text-purple-600" } :
+                      rec.type === "lab_report" ? { bg: "bg-red-100", text: "text-red-600", badge: "bg-red-50 text-red-600" } :
+                      { bg: "bg-teal-100", text: "text-teal-600", badge: "bg-teal-50 text-teal-600" };
+                    return (
+                      <div key={recId || i} className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all ${
+                        hasSummary ? "border-purple-200" : "border-slate-100"
                       }`}>
-                        <FileText size={18}/>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-bold text-slate-800 text-sm truncate">{rec.title}</h4>
-                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black capitalize ${
-                            rec.type==="xray"?"bg-blue-50 text-blue-600":
-                            rec.type==="prescription"?"bg-purple-50 text-purple-600":
-                            rec.type==="lab_report"?"bg-red-50 text-red-600":"bg-teal-50 text-teal-600"
-                          }`}>{rec.type?.replace("_"," ")}</span>
+                        {/* Record Header */}
+                        <div className="p-5 flex items-start gap-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${typeColor.bg} ${typeColor.text}`}>
+                            <FileText size={18}/>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-bold text-slate-800 text-sm truncate">{rec.title}</h4>
+                              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black capitalize ${typeColor.badge}`}>
+                                {rec.type?.replace("_", " ")}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">{rec.date?.slice(0, 10)}</p>
+                            <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{rec.description || rec.notes}</p>
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">{rec.date?.slice(0,10)} {rec.doctorId ? `· Dr (${rec.doctorId})` : ""}</p>
-                        <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{rec.description || rec.notes}</p>
+
+                        {/* Action Row */}
+                        <div className="px-5 pb-4 flex items-center gap-2">
+                          {/* SUMMARIZE button — only shown if no summary exists */}
+                          {canSummarize && (
+                            <button
+                              onClick={() => handleSummarize(recId!)}
+                              disabled={isLoading}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-bold rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-60 transition-all shadow-sm shadow-purple-400/30"
+                            >
+                              {isLoading ? (
+                                <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating...</>
+                              ) : (
+                                <><Sparkles size={12}/> Summarize</>
+                              )}
+                            </button>
+                          )}
+                          {/* SHOW/HIDE summary toggle — only if summary exists */}
+                          {hasSummary && (
+                            <button
+                              onClick={() => setExpandedSummary(isExpanded ? null : recId!)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 text-xs font-bold rounded-xl hover:bg-purple-100 transition-all border border-purple-200"
+                            >
+                              <Sparkles size={12}/>
+                              {isExpanded ? "Hide AI Summary" : "View AI Summary"}
+                              {isExpanded ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                            </button>
+                          )}
+                          {hasSummary && (
+                            <span className="text-[10px] text-purple-400 font-semibold ml-1">✓ AI Summary available</span>
+                          )}
+                        </div>
+
+                        {/* AI SUMMARY PANEL — beautifully styled */}
+                        <AnimatePresence>
+                          {hasSummary && isExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="mx-4 mb-4 bg-gradient-to-br from-violet-50 to-purple-50 border border-purple-200 rounded-2xl p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-6 h-6 bg-purple-500 rounded-lg flex items-center justify-center">
+                                    <Sparkles size={12} className="text-white"/>
+                                  </div>
+                                  <span className="text-xs font-black text-purple-700 uppercase tracking-wider">AI Summary</span>
+                                  {rec.summaryGeneratedAt && (
+                                    <span className="ml-auto text-[10px] text-purple-400 font-medium">
+                                      Generated {new Date(rec.summaryGeneratedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line font-medium">
+                                  {rec.aiSummary}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -610,28 +748,89 @@ export default function PatientDashboard() {
 
           {/* ═══════════ MEDICATIONS TAB ═══════════ */}
           {activeTab === "Medications" && (
-            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-[1400px]">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-800">Prescribed Medications</h3>
-                <button className="bg-teal-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">+ Request Refill</button>
+            <div className="space-y-6 max-w-[1400px]">
+              <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-slate-800">Prescribed Medications</h3>
+                  <button className="bg-teal-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">+ Request Refill</button>
+                </div>
+                {timeline.filter(t=>t.type==="prescription").length === 0 ? (
+                  <div className="text-center py-10">
+                    <Pill size={40} className="mx-auto text-slate-200 mb-3"/>
+                    <p className="text-slate-400 font-medium text-sm">No prescriptions yet. Your doctor will add them here after your visit.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {timeline.filter(t=>t.type==="prescription").map((rx, i) => {
+                      const rxId = rx._id?.toString();
+                      const hasSummary = !!rx.aiSummary;
+                      const isLoading = summarizingId === rxId;
+                      const isExpanded = expandedSummary === rxId;
+                      return (
+                        <div key={`rx-${i}`} className={`border rounded-2xl p-5 transition-all ${
+                          hasSummary ? "border-purple-200 bg-purple-50/20" : "border-purple-100 hover:border-purple-200 hover:bg-purple-50/30"
+                        }`}>
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
+                              <Pill size={18} className="text-purple-600"/>
+                            </div>
+                            {hasSummary && (
+                              <span className="text-[10px] bg-purple-100 text-purple-600 font-black px-2 py-0.5 rounded-full">AI ✓</span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-slate-800 text-base mb-1">{rx.title}</h4>
+                          <p className="text-slate-500 text-xs mb-1 line-clamp-2">{rx.description || rx.notes}</p>
+                          <p className="text-slate-400 text-xs mb-4">{rx.date?.slice(0,10)}</p>
+
+                          {/* Summarize or View Summary */}
+                          {!hasSummary ? (
+                            <button
+                              onClick={() => handleSummarize(rxId!)}
+                              disabled={isLoading}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-bold rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-60 transition-all"
+                            >
+                              {isLoading
+                                ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating...</>
+                                : <><Sparkles size={12}/> Summarize Prescription</>}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setExpandedSummary(isExpanded ? null : rxId!)}
+                              className="w-full flex items-center justify-center gap-1.5 py-2 bg-purple-100 text-purple-700 text-xs font-bold rounded-xl hover:bg-purple-200 transition-all"
+                            >
+                              <Sparkles size={12}/>
+                              {isExpanded ? "Hide Summary" : "View AI Summary"}
+                              {isExpanded ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                            </button>
+                          )}
+
+                          {/* Expanded Summary */}
+                          <AnimatePresence>
+                            {hasSummary && isExpanded && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                                animate={{ opacity: 1, height: "auto", marginTop: 12 }}
+                                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="bg-gradient-to-br from-violet-50 to-purple-50 border border-purple-200 rounded-xl p-3">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <Sparkles size={10} className="text-purple-500"/>
+                                    <span className="text-[10px] font-black text-purple-600 uppercase tracking-wider">AI Summary</span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-line">
+                                    {rx.aiSummary}
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              {timeline.filter(t=>t.type==="prescription").length === 0 ? (
-                <div className="text-center py-10">
-                  <Pill size={40} className="mx-auto text-slate-200 mb-3"/>
-                  <p className="text-slate-400 font-medium text-sm">No prescriptions yet. Your doctor will add them here after your visit.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {timeline.filter(t=>t.type==="prescription").map((rx,i)=>(
-                    <div key={`rx-${i}`} className="border border-purple-100 rounded-2xl p-6 hover:border-purple-200 hover:bg-purple-50/30 transition-all">
-                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mb-4"><Pill size={18} className="text-purple-600"/></div>
-                      <h4 className="font-bold text-slate-800 text-lg mb-1">{rx.title}</h4>
-                      <p className="text-slate-500 text-sm mb-2">{rx.description || rx.notes}</p>
-                      <p className="text-slate-400 text-xs">{rx.date?.slice(0,10)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 

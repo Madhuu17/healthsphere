@@ -16,6 +16,13 @@ interface SymptomResult {
   possibleConditions?: string[];
 }
 
+interface DoctorMatchResult {
+  specialization: string;
+  urgency: string;
+  reason: string;
+  alternativeSpecializations?: string[];
+}
+
 const NAV_LINKS = [
   { label: "Profile",         href: "/patient/dashboard", icon: UserRound },
   { label: "Appointments",    href: "/patient/dashboard", icon: Calendar },
@@ -38,8 +45,13 @@ export default function SymptomCheckerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [doctorMatch, setDoctorMatch] = useState<DoctorMatchResult | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState("");
+
   const handleLogout = () => {
     localStorage.removeItem("user");
+    localStorage.removeItem("isLoggedIn");
     router.push("/login");
   };
 
@@ -48,6 +60,8 @@ export default function SymptomCheckerPage() {
     setLoading(true);
     setResult(null);
     setError("");
+    setDoctorMatch(null);
+    setMatchError("");
     try {
       const res = await fetch("http://localhost:5000/api/ai/symptoms", {
         method: "POST",
@@ -62,6 +76,45 @@ export default function SymptomCheckerPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBookAppointment = async () => {
+    if (!symptoms.trim()) return;
+    setMatchLoading(true);
+    setDoctorMatch(null);
+    setMatchError("");
+    try {
+      const res = await fetch("http://localhost:5000/api/ai/match-doctor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symptoms }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Doctor matching failed");
+      setDoctorMatch(data.data);
+    } catch (err: unknown) {
+      setMatchError(err instanceof Error ? err.message : "Failed to match doctor. Please try again.");
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
+  const urgencyStyle = (urgency: string) => {
+    if (urgency === "emergency") return "bg-red-50 text-red-700 border-red-200";
+    if (urgency === "urgent")    return "bg-yellow-50 text-yellow-700 border-yellow-200";
+    return "bg-green-50 text-green-700 border-green-200";
+  };
+
+  const urgencyIcon = (urgency: string) => {
+    if (urgency === "emergency") return "🚨";
+    if (urgency === "urgent")    return "⚡";
+    return "📅";
+  };
+
+  const urgencyLabel = (urgency: string) => {
+    if (urgency === "emergency") return "Emergency — Go to ER Now";
+    if (urgency === "urgent")    return "Urgent — See within 48h";
+    return "Routine Visit";
   };
 
   return (
@@ -173,7 +226,7 @@ export default function SymptomCheckerPage() {
               </button>
             </div>
 
-            {/* Error */}
+            {/* Symptom Check Error */}
             {error && (
               <div className="bg-red-50 border border-red-100 rounded-2xl px-6 py-4 text-red-600 font-semibold text-sm">
                 ⚠️ {error}
@@ -228,11 +281,89 @@ export default function SymptomCheckerPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Book Appointment Button */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      onClick={handleBookAppointment}
+                      disabled={matchLoading}
+                      className={`w-full py-3.5 rounded-2xl text-base font-bold transition-all flex items-center justify-center gap-2 ${
+                        matchLoading
+                          ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                          : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 shadow-sm hover:shadow-md"
+                      }`}
+                    >
+                      <Calendar size={18} />
+                      {matchLoading ? "⏳ Finding Best Doctor..." : "Book Appointment"}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Disclaimer */}
                 <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 font-medium">
                   ⚠️ This is an AI assessment only — not a medical diagnosis. Always consult a qualified healthcare professional.
+                </div>
+              </div>
+            )}
+
+            {/* Doctor Match Error */}
+            {matchError && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl px-6 py-4 text-red-600 font-semibold text-sm">
+                ⚠️ {matchError}
+              </div>
+            )}
+
+            {/* Doctor Match Result Card */}
+            {doctorMatch && (
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                {/* Header */}
+                <div className="px-8 py-5 bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-white text-2xl">
+                    🩺
+                  </div>
+                  <div>
+                    <p className="text-white/80 text-sm font-semibold uppercase tracking-widest">Recommended Specialist</p>
+                    <p className="text-white text-xl font-black mt-0.5">{doctorMatch.specialization}</p>
+                  </div>
+                </div>
+
+                <div className="p-8 space-y-5">
+                  {/* Urgency Badge */}
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-bold border ${urgencyStyle(doctorMatch.urgency)}`}>
+                    {urgencyIcon(doctorMatch.urgency)}
+                    <span>{urgencyLabel(doctorMatch.urgency)}</span>
+                  </div>
+
+                  {/* Reason */}
+                  <div>
+                    <h3 className="text-sm font-black text-slate-500 uppercase tracking-wider mb-2">Why This Specialist?</h3>
+                    <p className="text-slate-700 leading-relaxed font-medium">{doctorMatch.reason}</p>
+                  </div>
+
+                  {/* Alternative Specializations */}
+                  {doctorMatch.alternativeSpecializations && doctorMatch.alternativeSpecializations.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-black text-slate-500 uppercase tracking-wider mb-3">Also Consider</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {doctorMatch.alternativeSpecializations.map((alt, i) => (
+                          <span key={i} className="px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-sm font-semibold text-blue-700">
+                            {alt}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CTA → Book Appointment */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <Link
+                      href={`/patient/book-appointment?symptoms=${encodeURIComponent(symptoms)}&doctorType=${encodeURIComponent(doctorMatch.specialization)}`}
+                      className="w-full py-3.5 rounded-2xl text-base font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                    >
+                      <Calendar size={18} />
+                      Book This Appointment →
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}

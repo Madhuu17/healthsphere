@@ -23,15 +23,19 @@ app.get('/', (req, res) => {
   res.send('HealthSphere API is running...');
 });
 
-import authRoutes    from './routes/authRoutes';
-import patientRoutes from './routes/patientRoutes';
-import doctorRoutes  from './routes/doctorRoutes';
-import aiRoutes      from './routes/aiRoutes';
+import authRoutes          from './routes/authRoutes';
+import patientRoutes       from './routes/patientRoutes';
+import doctorRoutes        from './routes/doctorRoutes';
+import aiRoutes            from './routes/aiRoutes';
+import appointmentRoutes   from './routes/appointmentRoutes';
+import medicalRecordRoutes from './routes/medicalRecordRoutes';
 
-app.use('/api/auth',     authRoutes);
-app.use('/api/patients', patientRoutes);
-app.use('/api/doctor',   doctorRoutes);
-app.use('/api/ai',       aiRoutes);
+app.use('/api/auth',            authRoutes);
+app.use('/api/patients',        patientRoutes);
+app.use('/api/doctor',          doctorRoutes);
+app.use('/api/ai',              aiRoutes);
+app.use('/api/appointments',    appointmentRoutes);
+app.use('/api/medical-records', medicalRecordRoutes);
 
 const PORT = process.env.PORT || 5000;
 
