@@ -13,12 +13,7 @@ const MOCK_MEDS = [
   { name: "Paracetamol 650mg", dose: "As needed (max 4/day)", condition: "Pain relief" }
 ];
 
-const MOCK_APPTS = [
-  { type: "Urgent",      date: "11/02/2026", provider: "Dr. Aditi Verma", status: "Scheduled" },
-  { type: "Follow-Up",  date: "10/25/2026", provider: "Dr. Neha Reddy",   status: "Completed" },
-  { type: "Follow-Up",  date: "09/12/2026", provider: "Dr. Manoj Pillai",     status: "Completed" },
-  { type: "Chronic Care",date: "08/07/2026", provider: "Dr. Pooja Bose",   status: "Completed" }
-];
+
 
 const CITY_DATA: Record<string, { hospitals: string[]; doctors: string[]; slots: {label: string; day: number}[] }> = {
   "Mumbai": {
@@ -80,8 +75,10 @@ export default function PatientDashboard() {
   const [activeTab, setActiveTab]           = useState("Profile");
   const [profile,   setProfile]             = useState<any>({ name:"Loading...", id:"...", bloodGroup:"-", dob:"", gender:"-", email:"...", contactNumber:"-", address: "...", emergencyContact: { name: "...", phone: "..." } });
   const [timeline,  setTimeline]            = useState<any[]>([]);
-  const [messages,  setMessages]            = useState<any[]>([]);
-  const [showMessages, setShowMessages]     = useState(false);
+  const [messages,      setMessages]        = useState<any[]>([]);
+  const [showMessages,  setShowMessages]    = useState(false);
+  const [appointments,  setAppointments]    = useState<any[]>([]);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Modals
   const [showSettings,  setShowSettings]    = useState(false);
@@ -208,9 +205,25 @@ export default function PatientDashboard() {
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLiveDoctors(data); })
       .catch(() => {});
+
+    // Fetch real appointments filtered by current user
+    fetch("http://localhost:5000/api/appointments")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          const userName = localStorage.getItem("userName") || user.name || "";
+          setAppointments(data.filter((a: any) => a.patientName === userName));
+        }
+      })
+      .catch(() => {});
   }, [router]);
 
-  const handleLogout = () => { localStorage.removeItem("user"); localStorage.removeItem("isLoggedIn"); router.push("/login"); };
+  const handleLogout = () => setShowLogoutModal(true);
+
+  const confirmLogout = () => {
+    localStorage.clear();
+    router.push("/login");
+  };
 
   const cityOptions = [...new Set(liveDoctors.map((d: any) => d.hospital).filter(Boolean))];
 
@@ -255,8 +268,16 @@ export default function PatientDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setScheduled(prev => [...prev, new Date(apptDate).getDate()]);
-      // Add timeline entry locally immediately
-      setTimeline(prev => [{ _id: Date.now(), type:"consultation", title:`Appointment with ${selectedDoc.name}`, description:`${selectedSlot} at ${selectedDoc.hospital} on ${apptDate}.`, date: apptDate }, ...prev]);
+      // Add locally to Appointments state
+      setAppointments(prev => [{
+        doctorType: selectedDoc.specialization,
+        doctorName: selectedDoc.name,
+        status: "Scheduled",
+        symptoms: "Not provided",
+        date: apptDate,
+        timeSlot: selectedSlot,
+        patientName: user.name
+      }, ...prev]);
       // Add message notification
       setMessages(prev => [{ id: Date.now(), type:"appointment", text:`Appointment booked with ${selectedDoc.name} on ${apptDate} at ${selectedSlot}`, date:"Just Now", isNew:true }, ...prev]);
       setApptStep(2);
@@ -546,37 +567,57 @@ export default function PatientDashboard() {
 
           {/* ═══════════ APPOINTMENTS TAB ═══════════ */}
           {activeTab === "Appointments" && (
-            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-[1400px]">
+            <div className="max-w-[1400px]">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-800">All Appointments</h3>
-                <div className="flex gap-3">
-                  <button onClick={() => setShowCalendar(true)} className="bg-slate-100 text-slate-700 px-5 py-2 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-2"><CalendarIcon size={16}/> Calendar</button>
-                  <button onClick={openAppt} className="bg-teal-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">+ Book New</button>
+                <h3 className="text-2xl font-bold text-slate-800">My Appointments</h3>
+                <button onClick={openAppt} className="bg-teal-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-teal-600 transition-colors">+ Book New</button>
+              </div>
+              {appointments.length === 0 ? (
+                <div className="bg-white rounded-3xl p-14 border border-slate-100 shadow-sm flex flex-col items-center text-center gap-4">
+                  <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center">
+                    <CalendarIcon size={30} className="text-teal-400"/>
+                  </div>
+                  <div>
+                    <p className="text-slate-700 font-bold text-lg">No appointments booked yet</p>
+                    <p className="text-slate-400 text-sm mt-1">Use the "Book New" button to schedule a visit.</p>
+                  </div>
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left min-w-[600px]">
-                  <thead><tr className="text-slate-400 text-xs uppercase tracking-wider border-b-2 border-slate-100">
-                    <th className="pb-4 font-bold px-2">Visit Type</th><th className="pb-4 font-bold px-2">Date</th>
-                    <th className="pb-4 font-bold px-2">Provider</th><th className="pb-4 font-bold px-2">Status</th>
-                    <th className="pb-4 font-bold px-2 text-center">Actions</th>
-                  </tr></thead>
-                  <tbody className="text-sm font-semibold text-slate-700">
-                    {MOCK_APPTS.map((a,i)=>(
-                      <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                        <td className="py-5 px-2">{a.type}</td><td className="py-5 px-2">{a.date}</td>
-                        <td className="py-5 px-2">{a.provider}</td>
-                        <td className="py-5 px-2"><span className={`px-2 py-1 rounded-full text-xs font-bold ${a.status==="Scheduled"?"bg-teal-50 text-teal-600":"bg-slate-100 text-slate-500"}`}>{a.status}</span></td>
-                        <td className="py-5 px-2"><div className="flex items-center justify-center gap-4 text-slate-400">
-                          <button className="hover:text-teal-500 transition-colors"><Eye size={16}/></button>
-                          <button className="hover:text-teal-500 transition-colors"><Edit2 size={16}/></button>
-                          <button className="hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-                        </div></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {appointments.map((a, i) => (
+                    <div key={i} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md hover:border-teal-100 transition-all">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-teal-50 rounded-full flex items-center justify-center shrink-0">
+                            <Stethoscope size={18} className="text-teal-600"/>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-800 leading-tight text-sm">{a.doctorType || "Specialist"}</h4>
+                            <p className="text-xs text-slate-500 mt-0.5">{a.doctorName}</p>
+                          </div>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                          a.status === "Completed" ? "bg-slate-100 text-slate-500" : "bg-teal-100 text-teal-700"
+                        }`}>{a.status || "Scheduled"}</span>
+                      </div>
+                      <div className="space-y-2 pt-4 border-t border-slate-100 text-sm">
+                        <div className="flex items-start gap-2">
+                          <Activity size={13} className="text-slate-400 shrink-0 mt-0.5"/>
+                          <p className="text-slate-600 leading-snug"><span className="font-semibold text-slate-700">Symptoms: </span>{a.symptoms || "Not provided"}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CalendarIcon size={13} className="text-slate-400 shrink-0"/>
+                          <p className="text-slate-600"><span className="font-semibold text-slate-700">Date: </span>{a.date}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock size={13} className="text-slate-400 shrink-0"/>
+                          <p className="text-slate-600"><span className="font-semibold text-slate-700">Time: </span>{a.timeSlot}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1136,7 +1177,37 @@ export default function PatientDashboard() {
           </div>
         )}
 
-
+        {/* ─── Logout Confirmation Modal ─── */}
+        {showLogoutModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+            >
+              <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <LogOut size={26} className="text-red-500"/>
+              </div>
+              <h2 className="text-xl font-black text-slate-800 mb-2">Logout?</h2>
+              <p className="text-slate-500 text-sm font-medium mb-7">Are you sure you want to logout from HealthSphere?</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowLogoutModal(false)}
+                  className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors text-sm"
+                >
+                  Yes, Logout
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
       </AnimatePresence>
     </div>
