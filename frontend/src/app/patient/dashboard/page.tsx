@@ -3,14 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserRound, Calendar as CalendarIcon, CreditCard, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Smartphone, Landmark, Wallet, Stethoscope, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { UserRound, Calendar as CalendarIcon, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Stethoscope, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const MOCK_BILLS = [
-  { date: "10/25/2026", amount: "₹120.00", status: "Paid", desc: "Consultation - Dr. Jenkins" },
-  { date: "09/14/2026", amount: "₹45.00",  status: "Paid", desc: "Lab Report - CBC" },
-  { date: "08/02/2026", amount: "₹210.00", status: "Pending", desc: "X-Ray Imaging" }
-];
 
 const MOCK_MEDS = [
   { name: "Amoxicillin 500mg", dose: "1 pill every 8 hours", condition: "Infection" },
@@ -87,10 +82,6 @@ export default function PatientDashboard() {
   const [summaryError,   setSummaryError]   = useState<string | null>(null);
   const [expandedSummary,setExpandedSummary]= useState<string | null>(null);
   const [apptStep,      setApptStep]        = useState(1);
-  const [payBill,       setPayBill]         = useState<any>(null);
-  const [payStep,       setPayStep]         = useState(1);
-  const [payMethod,     setPayMethod]       = useState("");
-  const [bills,         setBills]           = useState(MOCK_BILLS);
 
   // Appointment form (live)
   const [city,          setCity]         = useState("");
@@ -194,7 +185,6 @@ export default function PatientDashboard() {
             if (t.type === 'prescription') newMsgs.push({ id:`pr-${i}`, type:'prescription', text:`New Prescription: ${t.title}`, date: t.date?.slice(0,10), isNew: false });
           });
         }
-        newMsgs.push({ id:"bill1", type:"bill", text:"New Bill: Consultation (₹120.00) is due.", date:"Oct 25", isNew: newMsgs.length < 2 });
         setMessages(newMsgs);
       })
       .catch(() => {
@@ -202,8 +192,7 @@ export default function PatientDashboard() {
         setEditName(user.name||"");
         setEditEmail(user.email||"");
         setMessages([
-          { id: 1, type: "appointment", text: "Reminder: Your upcoming appointment.", date: "Oct 31", isNew: true },
-          { id: 2, type: "bill", text: "New Bill: Consultation (₹120.00) is due.", date: "Oct 25", isNew: true }
+          { id: 1, type: "appointment", text: "Reminder: Your upcoming appointment.", date: "Oct 31", isNew: true }
         ]);
       });
 
@@ -271,7 +260,6 @@ export default function PatientDashboard() {
   const NAV = [
     { name:"Profile",        icon:UserRound },
     { name:"Appointments",   icon:CalendarIcon },
-    { name:"Medical Bills",  icon:CreditCard },
     { name:"Medical Records",icon:FileText },
     { name:"Medications",    icon:Pill },
     { name:"Timeline",       icon:Activity },
@@ -372,11 +360,9 @@ export default function PatientDashboard() {
                         <div key={m.id} className={`p-3 rounded-2xl border transition-all ${m.isNew ? "bg-teal-50/50 border-teal-100" : "bg-slate-50 border-slate-100"}`}>
                           <div className="flex items-start gap-3">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                              m.type === "appointment" ? "bg-teal-100 text-teal-600" :
-                              m.type === "bill" ? "bg-orange-100 text-orange-600" :
-                              m.type === "bill_paid" ? "bg-green-100 text-green-600" : "bg-purple-100 text-purple-600"
+                              m.type === "appointment" ? "bg-teal-100 text-teal-600" : "bg-purple-100 text-purple-600"
                             }`}>
-                              {m.type === "appointment" ? <CalendarIcon size={14}/> : m.type === "bill" ? <CreditCard size={14}/> : m.type === "bill_paid" ? <CheckCircle2 size={14}/> : <Pill size={14}/>}
+                              {m.type === "appointment" ? <CalendarIcon size={14}/> : <Pill size={14}/>}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-slate-800 leading-normal">{m.text}</p>
@@ -499,26 +485,7 @@ export default function PatientDashboard() {
                     </table>
                 </div>
 
-                {/* Medical Bills */}
-                <div className="bg-white rounded-3xl p-7 border border-slate-100 shadow-sm">
-                  <div className="flex items-center justify-between mb-5">
-                    <h3 className="text-xl font-bold text-slate-800">Medical Bills</h3>
-                    <button onClick={() => setActiveTab("Medical Bills")} className="bg-teal-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-teal-600 transition-colors">Pay All</button>
-                  </div>
-                  <table className="w-full text-left text-sm">
-                    <thead><tr className="text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100">
-                      <th className="pb-3 font-bold">Date</th><th className="pb-3 font-bold">Amount</th><th className="pb-3 font-bold">Status</th>
-                    </tr></thead>
-                    <tbody className="font-semibold text-slate-700">
-                      {MOCK_BILLS.map((b,i)=>(
-                        <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                          <td className="py-3 text-slate-500">{b.date}</td><td className="py-3">{b.amount}</td>
-                          <td className="py-3"><span className={`flex items-center gap-1.5 text-xs font-bold ${b.status==="Paid"?"text-teal-500":"text-orange-500"}`}><CheckCircle2 size={13}/>{b.status}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+
 
                 {/* Medications */}
                 <div className="bg-white rounded-3xl p-7 border border-slate-100 shadow-sm">
@@ -580,42 +547,7 @@ export default function PatientDashboard() {
             </div>
           )}
 
-          {/* ═══════════ MEDICAL BILLS TAB ═══════════ */}
-          {activeTab === "Medical Bills" && (
-            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-[1400px] space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-slate-800">All Medical Bills</h3>
-                <button className="bg-teal-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">Pay All Outstanding</button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <div className="bg-teal-50 rounded-2xl p-5 border border-teal-100"><p className="text-teal-500 text-sm font-semibold">Total Paid</p><p className="text-3xl font-black text-teal-700 mt-1">₹165.00</p></div>
-                <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100"><p className="text-orange-500 text-sm font-semibold">Outstanding</p><p className="text-3xl font-black text-orange-600 mt-1">₹210.00</p></div>
-                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100"><p className="text-slate-500 text-sm font-semibold">Total Bills</p><p className="text-3xl font-black text-slate-700 mt-1">{MOCK_BILLS.length}</p></div>
-              </div>
-              <table className="w-full text-left text-sm min-w-[500px]">
-                <thead><tr className="text-slate-400 text-xs uppercase tracking-wider border-b-2 border-slate-100">
-                  <th className="pb-4 font-bold px-2">Date</th><th className="pb-4 font-bold px-2">Description</th>
-                  <th className="pb-4 font-bold px-2">Amount</th><th className="pb-4 font-bold px-2">Status</th>
-                  <th className="pb-4 font-bold px-2 text-center">Action</th>
-                </tr></thead>
-                <tbody className="font-semibold text-slate-700">
-                  {MOCK_BILLS.map((b,i)=>(
-                    <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                      <td className="py-5 px-2 text-slate-500">{b.date}</td>
-                      <td className="py-5 px-2">{b.desc}</td>
-                      <td className="py-5 px-2">{b.amount}</td>
-                      <td className="py-5 px-2"><span className={`px-3 py-1 rounded-full text-xs font-bold ${b.status==="Paid"?"bg-teal-50 text-teal-600":"bg-orange-50 text-orange-600"}`}>{b.status}</span></td>
-                      <td className="py-5 px-2 text-center">
-                         {b.status==="Pending"
-                           ? <button onClick={()=>{setPayBill(b);setPayStep(1);setPayMethod("");}} className="bg-teal-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-teal-600 transition-colors">Pay Now</button>
-                           : <span className="text-slate-400 text-xs font-medium">Settled</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+
 
           {/* ═══════════ MEDICAL RECORDS TAB ═══════════ */}
           {activeTab === "Medical Records" && (
@@ -935,17 +867,15 @@ export default function PatientDashboard() {
                     <div className="flex items-start gap-5">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
                         m.type === "appointment" ? "bg-teal-100 text-teal-600" :
-                        m.type === "bill" ? "bg-orange-100 text-orange-600" :
-                        m.type === "bill_paid" ? "bg-green-100 text-green-600" : "bg-purple-100 text-purple-600"
+                        "bg-purple-100 text-purple-600"
                       }`}>
-                        {m.type === "appointment" ? <CalendarIcon size={20}/> : m.type === "bill" ? <CreditCard size={20}/> : m.type === "bill_paid" ? <CheckCircle2 size={20}/> : <Pill size={20}/>}
+                        {m.type === "appointment" ? <CalendarIcon size={20}/> : <Pill size={20}/>}
                       </div>
                       <div className="flex-1 min-w-0 py-1">
                         <div className="flex items-center justify-between mb-1">
                           <span className={`text-[10px] font-black uppercase tracking-widest ${
                             m.type === "appointment" ? "text-teal-500" :
-                            m.type === "bill" ? "text-orange-500" :
-                            m.type === "bill_paid" ? "text-green-500" : "text-purple-500"
+                            "text-purple-500"
                           }`}>{m.type.replace('_',' ')}</span>
                           <span className="text-xs text-slate-400 font-bold">{m.date}</span>
                         </div>
@@ -1173,107 +1103,7 @@ export default function PatientDashboard() {
           </div>
         )}
 
-        {/* ─── Payment Modal ─── */}
-        {payBill && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <motion.div initial={{opacity:0,scale:0.95,y:20}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.95}}
-              className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-teal-50 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2 pointer-events-none"/>
-              <button onClick={()=>setPayBill(null)} className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 p-2 rounded-full text-slate-500"><X size={18}/></button>
 
-              {payStep===1 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Pay Bill</h2>
-                    <p className="text-slate-500 text-sm mt-1">{payBill.desc} · {payBill.date}</p>
-                  </div>
-
-                  {/* Amount banner */}
-                  <div className="bg-teal-50 border border-teal-100 rounded-2xl px-6 py-4 flex items-center justify-between">
-                    <span className="text-teal-600 font-semibold text-sm">Amount Due</span>
-                    <span className="text-3xl font-black text-teal-700">{payBill.amount}</span>
-                  </div>
-
-                  {/* QR Section */}
-                  <div className="border-2 border-dashed border-teal-200 rounded-2xl p-6 flex flex-col items-center gap-3 bg-teal-50/30">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Scan & Pay via UPI</p>
-                    {/* Inline SVG QR pattern */}
-                    <svg width="140" height="140" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg" className="rounded-xl border border-teal-100 bg-white p-2">
-                      <rect x="10" y="10" width="40" height="40" rx="4" fill="#0d9488"/>
-                      <rect x="16" y="16" width="28" height="28" rx="2" fill="white"/>
-                      <rect x="22" y="22" width="16" height="16" rx="1" fill="#0d9488"/>
-                      <rect x="90" y="10" width="40" height="40" rx="4" fill="#0d9488"/>
-                      <rect x="96" y="16" width="28" height="28" rx="2" fill="white"/>
-                      <rect x="102" y="22" width="16" height="16" rx="1" fill="#0d9488"/>
-                      <rect x="10" y="90" width="40" height="40" rx="4" fill="#0d9488"/>
-                      <rect x="16" y="96" width="28" height="28" rx="2" fill="white"/>
-                      <rect x="22" y="102" width="16" height="16" rx="1" fill="#0d9488"/>
-                      {[60,68,76,84,92,100,108].map((x,i)=> x%14===4 ? null : <rect key={i} x={x} y="60" width="6" height="6" fill="#0d9488"/>)}
-                      {[10,20,30,50,60,70,80,90,110,120,130].map((y,i)=><rect key={i} x="60" y={y} width="6" height="6" fill={i%3===0?"#0d9488":"transparent"}/>)}
-                      {[10,18,26,50,58,66,74,90,98,106,114,122].map((x,i)=><rect key={i} x={x} y="58" width="6" height="6" fill={i%2===0?"#0d9488":"transparent"}/>)}
-                    </svg>
-                    <p className="text-xs font-bold text-teal-600">healthsphere@upi</p>
-                    <p className="text-xs text-slate-400 font-medium">Open any UPI app, scan and pay</p>
-                  </div>
-
-                  <p className="text-center text-sm font-semibold text-slate-400">— or choose a payment method —</p>
-
-                  {/* Payment methods */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { id:"upi",   label:"UPI / GPay", icon: Smartphone, color:"text-green-600",  bg:"bg-green-50",  border:"border-green-200" },
-                      { id:"card",  label:"Credit/Debit",icon: CreditCard,  color:"text-blue-600",  bg:"bg-blue-50",   border:"border-blue-200"  },
-                      { id:"net",   label:"Net Banking", icon: Landmark,   color:"text-purple-600",bg:"bg-purple-50", border:"border-purple-200" },
-                    ].map(m=>(
-                      <button key={m.id} onClick={()=>setPayMethod(m.id)}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all font-semibold text-sm
-                          ${payMethod===m.id ? `${m.border} ${m.bg} ${m.color} shadow-sm` : "border-slate-200 text-slate-600 hover:border-slate-300 bg-slate-50"}`}>
-                        <m.icon size={22} className={payMethod===m.id ? m.color : "text-slate-400"}/>
-                        <span className="text-xs leading-tight text-center">{m.label}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <button onClick={()=>setPayStep(2)} disabled={!payMethod}
-                    className="w-full bg-teal-500 disabled:bg-teal-200 text-white font-bold py-4 rounded-xl hover:bg-teal-600 transition-colors shadow-sm">
-                    Proceed to Pay {payBill.amount}
-                  </button>
-                </div>
-              )}
-
-              {payStep===2 && (
-                <div className="text-center py-4 space-y-6">
-                  <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",stiffness:200}}
-                    className="w-24 h-24 bg-teal-100 rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle2 size={48} className="text-teal-500"/>
-                  </motion.div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Payment Successful!</h2>
-                    <p className="text-slate-500 font-medium mt-2">{payBill.desc}</p>
-                    <p className="text-3xl font-black text-teal-600 mt-3">{payBill.amount}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-2xl p-4 text-left space-y-2 border border-slate-100">
-                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">Transaction ID</span><span className="font-bold text-slate-800">TXN{Date.now().toString().slice(-8)}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">Date</span><span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">Method</span><span className="font-bold text-slate-800 capitalize">{payMethod=="upi"?"UPI / GPay":payMethod=="card"?"Credit/Debit Card":"Net Banking"}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">Status</span><span className="font-bold text-teal-600">✓ Paid</span></div>
-                  </div>
-                  <button onClick={()=>{
-                    setPayBill(null);
-                    // Add success message
-                    setMessages(prev => [{
-                      id: Date.now(),
-                      type: "bill_paid",
-                      text: `Bill Paid: ${payBill.desc} (${payBill.amount}) was successful.`,
-                      date: "Just Now",
-                      isNew: true
-                    }, ...prev]);
-                  }} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-colors">Done</button>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
 
       </AnimatePresence>
     </div>

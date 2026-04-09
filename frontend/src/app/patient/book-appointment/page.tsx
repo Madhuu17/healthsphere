@@ -12,7 +12,6 @@ import {
 const NAV_LINKS = [
   { label: "Profile",         href: "/patient/dashboard", icon: UserRound },
   { label: "Appointments",    href: "/patient/dashboard", icon: Calendar },
-  { label: "Medical Bills",   href: "/patient/dashboard", icon: CreditCard },
   { label: "Medical Records", href: "/patient/dashboard", icon: FileText },
   { label: "Medications",     href: "/patient/dashboard", icon: Pill },
   { label: "Messages",        href: "/patient/dashboard", icon: Mail },
