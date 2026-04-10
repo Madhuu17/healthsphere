@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
+const API = "http://localhost:5000";
+
 // ── Helper: calculate age from DOB ──
 function calcAge(dob: string): number | null {
   if (!dob) return null;
@@ -15,7 +17,7 @@ function calcAge(dob: string): number | null {
   return age;
 }
 
-// Helper to format date explicitly as dd-mm-yyyy
+// ── DD-MM-YYYY date formatter (used everywhere) ──
 function formatDate(d: string | Date | null | undefined) {
   if (!d) return "";
   const date = new Date(d);
@@ -54,6 +56,7 @@ interface PatientContextType {
   setAppointments: (a: any) => void;
   upcomingAppointments: any[];
   pastAppointments: any[];
+  appointmentsLoading: boolean;
   // Modals
   showSettings: boolean;
   setShowSettings: (b: boolean) => void;
@@ -145,6 +148,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [showMessages, setShowMessages] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Modals
@@ -195,12 +199,12 @@ export function PatientProvider({ children }: { children: ReactNode }) {
 
   const upcomingAppointments = appointments.filter((a: any) => {
     const d = new Date(a.date);
-    return !isNaN(d.getTime()) && d >= today;
+    return !isNaN(d.getTime()) && d >= today && a.status !== 'completed' && a.status !== 'cancelled';
   });
 
   const pastAppointments = appointments.filter((a: any) => {
     const d = new Date(a.date);
-    return !isNaN(d.getTime()) && d < today;
+    return !isNaN(d.getTime()) && (d < today || a.status === 'completed');
   });
 
   // ── AI Summarize handler ──
@@ -208,7 +212,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     setSummarizingId(recordId);
     setSummaryError(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/medical-records/summarize/${recordId}`, { method: "POST" });
+      const res = await fetch(`${API}/api/medical-records/summarize/${recordId}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Summarization failed");
       setTimeline((prev: any[]) => prev.map(item =>
@@ -235,7 +239,8 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     const patientId = user.id || user.patientId;
     setEditName(user.name || "");
 
-    fetch(`http://localhost:5000/api/patients/${patientId}/dashboard`)
+    // ── 1) Fetch dashboard (profile + timeline) ──
+    fetch(`${API}/api/patients/${patientId}/dashboard`)
       .then(r => r.json())
       .then(data => {
         if (data.profile) {
@@ -255,8 +260,10 @@ export function PatientProvider({ children }: { children: ReactNode }) {
         }
         const tl = data.timeline?.length ? data.timeline : [];
         setTimeline(tl);
+
+        // Merge AI summaries from medical records
         if (patientId) {
-          fetch(`http://localhost:5000/api/medical-records/patient/${patientId}`)
+          fetch(`${API}/api/medical-records/patient/${patientId}`)
             .then(r => r.json())
             .then(rec => {
               if (rec.success && rec.records?.length) {
@@ -268,23 +275,13 @@ export function PatientProvider({ children }: { children: ReactNode }) {
             })
             .catch(() => {});
         }
+
         if (data.appointments?.length) {
           setScheduled(data.appointments.map((a: any) => new Date(a.date).getDate()));
         }
-        const newMsgs: any[] = [];
-        if (data.appointments?.length) {
-          data.appointments.slice(0,2).forEach((a: any, i: number) => {
-            newMsgs.push({ id:`ap-${i}`, type:"appointment", text:`Reminder: Appointment with ${a.doctorName} on ${formatDate(a.date)} at ${a.timeSlot}`, date: a.date, isNew: true });
-          });
-        }
-        if (data.timeline?.length) {
-          data.timeline.slice(0,2).forEach((t: any, i: number) => {
-            if (t.type === 'prescription') newMsgs.push({ id:`pr-${i}`, type:'prescription', text:`New Prescription: ${t.title}`, date: t.date?.slice(0,10), isNew: false });
-          });
-        }
-        setMessages(newMsgs);
 
-        fetch(`http://localhost:5000/api/notifications/${patientId}`)
+        // Messages from notifications
+        fetch(`${API}/api/notifications/${patientId}`)
           .then(r => r.json())
           .then(nd => {
             if (nd.success && nd.notifications?.length) {
@@ -296,11 +293,11 @@ export function PatientProvider({ children }: { children: ReactNode }) {
               const seedMsgs: any[] = [];
               if (data.appointments?.length) {
                 data.appointments.slice(0,2).forEach((a: any) => {
-                  seedMsgs.push({ type:'appointment', text:`Reminder: Appointment with ${a.doctorName} on ${a.date} at ${a.timeSlot}`, date: a.date });
+                  seedMsgs.push({ type:'appointment', text:`Reminder: Appointment with ${a.doctorName} on ${formatDate(a.date)} at ${a.timeSlot}`, date: a.date });
                 });
               }
               seedMsgs.forEach(msg => {
-                fetch('http://localhost:5000/api/notifications', {
+                fetch(`${API}/api/notifications`, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ patientId, ...msg }),
                 }).catch(() => {});
@@ -317,24 +314,23 @@ export function PatientProvider({ children }: { children: ReactNode }) {
         setMessages([{ id: 1, type: "appointment", text: "Reminder: Your upcoming appointment.", date: "Today", isNew: true }]);
       });
 
-    fetch("http://localhost:5000/api/doctor/all")
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setLiveDoctors(data); })
-      .catch(() => {});
-
-    fetch("http://localhost:5000/api/appointments")
+    // ── 2) Fetch ALL appointments for this patient from dedicated endpoint ──
+    setAppointmentsLoading(true);
+    fetch(`${API}/api/appointments/patient/${patientId}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
-          const userId = patientId;
-          let filtered = data.filter((a: any) =>
-            a.patientId === userId ||
-            (a.patientName && user.name && a.patientName.trim().toLowerCase() === user.name.trim().toLowerCase())
-          );
-          if (filtered.length === 0 && data.length > 0) filtered = data;
-          setAppointments(filtered);
+          setAppointments(data);
+          setScheduled(data.map((a: any) => new Date(a.date).getDate()));
         }
       })
+      .catch(() => {})
+      .finally(() => setAppointmentsLoading(false));
+
+    // ── 3) Fetch all doctors for booking modal ──
+    fetch(`${API}/api/doctor/all`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setLiveDoctors(data); })
       .catch(() => {});
   }, [router]);
 
@@ -353,7 +349,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     if (!docId || !date) return;
     setSlotLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/doctor/slots?doctorId=${docId}&date=${date}`);
+      const res = await fetch(`${API}/api/doctor/slots?doctorId=${docId}&date=${date}`);
       const data = await res.json();
       setAvailableSlots(data.blocked ? [] : (data.slots || []));
     } catch { setAvailableSlots([]); }
@@ -367,7 +363,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     const user = JSON.parse(userStr);
     setBookingLoading(true); setBookingError("");
     try {
-      const res = await fetch("http://localhost:5000/api/doctor/book", {
+      const res = await fetch(`${API}/api/doctor/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -379,13 +375,16 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      setScheduled((prev: number[]) => [...prev, new Date(apptDate).getDate()]);
-      setAppointments((prev: any[]) => [{
-        patientId: user.id, doctorType: selectedDoc.specialization,
-        doctorName: selectedDoc.name, status: "Scheduled", symptoms: "Not provided",
-        date: apptDate, timeSlot: selectedSlot, patientName: user.name
-      }, ...prev]);
-      setMessages((prev: any[]) => [{ id: Date.now(), type:"appointment", text:`Appointment booked with ${selectedDoc.name} on ${apptDate} at ${selectedSlot}`, date:"Just Now", isNew:true }, ...prev]);
+
+      // Re-fetch appointments from DB to ensure persistence
+      const apptRes = await fetch(`${API}/api/appointments/patient/${user.id}`);
+      const apptData = await apptRes.json();
+      if (Array.isArray(apptData)) {
+        setAppointments(apptData);
+        setScheduled(apptData.map((a: any) => new Date(a.date).getDate()));
+      }
+
+      setMessages((prev: any[]) => [{ id: Date.now(), type:"appointment", text:`Appointment booked with ${selectedDoc.name} on ${formatDate(apptDate)} at ${selectedSlot}`, date:"Just Now", isNew:true }, ...prev]);
       setApptStep(2);
     } catch (err: any) { setBookingError(err.message); }
     finally { setBookingLoading(false); }
@@ -394,7 +393,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const markOneRead = async (msg: any) => {
     setMessages((prev: any[]) => prev.filter(m => m.id !== msg.id));
     if (msg._id) {
-      fetch(`http://localhost:5000/api/notifications/${msg._id}/read`, { method: 'PUT' }).catch(() => {});
+      fetch(`${API}/api/notifications/${msg._id}/read`, { method: 'PUT' }).catch(() => {});
     }
   };
 
@@ -403,7 +402,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     const patientId = userStr ? JSON.parse(userStr).id : null;
     setMessages([]);
     if (patientId) {
-      fetch(`http://localhost:5000/api/notifications/${patientId}/read-all`, { method: 'PUT' }).catch(() => {});
+      fetch(`${API}/api/notifications/${patientId}/read-all`, { method: 'PUT' }).catch(() => {});
     }
   };
 
@@ -411,7 +410,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     <PatientContext.Provider value={{
       profile, setProfile, timeline, setTimeline, messages, setMessages,
       showMessages, setShowMessages, appointments, setAppointments,
-      upcomingAppointments, pastAppointments,
+      upcomingAppointments, pastAppointments, appointmentsLoading,
       showSettings, setShowSettings, showAppt, setShowAppt,
       showCalendar, setShowCalendar, showRecord, setShowRecord,
       showLogoutModal, setShowLogoutModal,

@@ -17,7 +17,7 @@ export default function DoctorTopbar() {
       <div>
         <h1 className="text-lg font-black text-slate-800">{title}</h1>
         <p className="text-xs text-slate-400 font-medium">
-          {new Date().toLocaleDateString("en-IN", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
+          {(() => { const d = new Date(); const dn = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]; return `${dn[d.getDay()]}, ${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`; })()}
         </p>
       </div>
       <div className="flex items-center gap-3">

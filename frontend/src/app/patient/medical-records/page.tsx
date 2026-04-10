@@ -113,7 +113,7 @@ export default function PatientMedicalRecords() {
                           <span className="text-xs font-black text-purple-700 uppercase tracking-wider">AI Summary</span>
                           {rec.summaryGeneratedAt && (
                             <span className="ml-auto text-[10px] text-purple-400 font-medium">
-                              Generated {new Date(rec.summaryGeneratedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                              Generated {formatDate(rec.summaryGeneratedAt)}
                             </span>
                           )}
                         </div>

@@ -21,7 +21,7 @@ export default function DoctorWeeklySchedule() {
             <ChevronLeft size={18}/>
           </button>
           <span className="font-bold text-slate-800 text-sm">
-            {weekDates[0] ? `${weekDates[0].toLocaleDateString("en-IN",{day:"numeric",month:"short"})} – ${weekDates[6]?.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}` : ""}
+            {weekDates[0] ? `${String(weekDates[0].getDate()).padStart(2,"0")}-${String(weekDates[0].getMonth()+1).padStart(2,"0")} – ${String(weekDates[6]?.getDate()).padStart(2,"0")}-${String(weekDates[6]?.getMonth()+1).padStart(2,"0")}-${weekDates[6]?.getFullYear()}` : ""}
           </span>
           <button onClick={() => setWeekOffset((w: number) => w + 1)}
             className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center hover:bg-slate-200 transition-colors">
@@ -107,7 +107,7 @@ export default function DoctorWeeklySchedule() {
                               <p className="font-bold text-slate-800 text-sm">{appt.patientName}</p>
                               <p className="text-xs text-slate-500 font-mono mt-0.5">{appt.patientId}</p>
                               <div className="border-t border-slate-100 mt-2 pt-2 space-y-1">
-                                <p className="text-[10px] text-slate-400">{slot} · {date.toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</p>
+                                <p className="text-[10px] text-slate-400">{slot} · {String(date.getDate()).padStart(2,"0")}-{String(date.getMonth()+1).padStart(2,"0")}-{date.getFullYear()}</p>
                                 <p className="text-[10px] text-slate-400">{appt.hospital}</p>
                                 <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full ${expired ? "bg-slate-100 text-slate-400" : "bg-teal-50 text-teal-600"}`}>
                                   {expired ? "Completed" : "Scheduled"}

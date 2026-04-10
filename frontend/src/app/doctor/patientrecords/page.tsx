@@ -343,7 +343,7 @@ export default function DoctorPatientRecords() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="font-bold text-slate-800">{r.title}</p>
-                              <p className="text-xs text-slate-400 mt-0.5">{new Date(r.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</p>
+                              <p className="text-xs text-slate-400 mt-0.5">{(() => { const d = new Date(r.date); return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`; })()}</p>
                             </div>
                             <span className={`shrink-0 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${meta.bg} ${meta.color}`}>
                               {r.type?.replace("_"," ")}

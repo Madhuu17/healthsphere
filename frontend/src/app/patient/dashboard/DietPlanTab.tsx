@@ -252,7 +252,7 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
           <div className="shrink-0 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl px-5 py-3 text-center">
             <p className="text-white text-[10px] font-black uppercase tracking-widest mb-0.5">Last Generated</p>
             <p className="text-white font-bold text-sm">
-              {new Date(savedPlan.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+              {(() => { const d = new Date(savedPlan.createdAt); return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`; })()}
             </p>
           </div>
         )}
@@ -459,7 +459,7 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
                 )}
               </div>
               <span className="text-xs text-slate-400 font-medium">
-                Generated on {new Date(savedPlan.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                Generated on {(() => { const d = new Date(savedPlan.createdAt); return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`; })()}
               </span>
             </div>
 

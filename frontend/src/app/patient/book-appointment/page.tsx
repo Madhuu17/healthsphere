@@ -243,7 +243,7 @@ export default function BookAppointmentPage() {
                       <Calendar size={16} className="text-teal-500 shrink-0" />
                       <span className="text-slate-500 font-semibold w-28">Date</span>
                       <span className="text-slate-800 font-bold">
-                        {new Date(form.date).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                        {formatDate(form.date)}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">

@@ -44,11 +44,6 @@ export default function PatientSidebar() {
           );
         })}
         <div className="pt-3 mt-3 border-t border-slate-100 space-y-1">
-          <Link href="/patient/medicine-reminders"
-            className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-orange-50 hover:text-orange-600 font-semibold text-left transition-all">
-            <Pill size={20} className="text-orange-400" />
-            <span className="flex-1">Medicine Reminders</span>
-          </Link>
           <Link href="/patient/symptom-checker"
             className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold text-left hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm hover:shadow-md">
             <Stethoscope size={20} />

@@ -4,12 +4,10 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import connectDB from './config/db';
-import { startReminderScheduler } from './utils/reminderScheduler';
 import { startMedicationScheduler } from './utils/medicationScheduler';
 
 dotenv.config();
 connectDB().then(() => {
-  startReminderScheduler();
   startMedicationScheduler();
 });
 
@@ -34,7 +32,6 @@ import doctorRoutes        from './routes/doctorRoutes';
 import aiRoutes            from './routes/aiRoutes';
 import appointmentRoutes   from './routes/appointmentRoutes';
 import medicalRecordRoutes from './routes/medicalRecordRoutes';
-import reminderRoutes      from './routes/reminderRoutes';
 import notificationRoutes  from './routes/notificationRoutes';
 import dietPlanRoutes      from './routes/dietPlanRoutes';
 import prescriptionRoutes  from './routes/prescriptionRoutes';
@@ -45,7 +42,6 @@ app.use('/api/doctor',          doctorRoutes);
 app.use('/api/ai',              aiRoutes);
 app.use('/api/appointments',    appointmentRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
-app.use('/api/reminders',       reminderRoutes);
 app.use('/api/notifications',   notificationRoutes);
 app.use('/api/diet-plans',      dietPlanRoutes);
 app.use('/api/prescriptions',   prescriptionRoutes);

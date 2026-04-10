@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import Appointment from '../models/Appointment';
+import MedicalRecord from '../models/MedicalRecord';
 
 export const createAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -30,6 +31,7 @@ export const createAppointment = async (req: Request, res: Response): Promise<vo
   }
 };
 
+// GET /api/appointments?patientId=xxx  or  ?doctorId=xxx
 export const getAppointments = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId, doctorId } = req.query;
@@ -38,12 +40,25 @@ export const getAppointments = async (req: Request, res: Response): Promise<void
     if (patientId) filter.patientId = patientId as string;
     if (doctorId)  filter.doctorId  = doctorId  as string;
 
-    const appointments = await Appointment.find(filter).sort({ createdAt: -1 });
+    const appointments = await Appointment.find(filter).sort({ date: -1, createdAt: -1 });
 
-    res.status(200).json({ success: true, data: appointments });
+    // Return flat array for backward compat AND wrapped format
+    res.status(200).json(appointments);
   } catch (error: any) {
     console.error('[Appointment] getAppointments error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to fetch appointments', error: error.message });
+  }
+};
+
+// GET /api/appointments/patient/:patientId — dedicated patient endpoint
+export const getPatientAppointments = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId } = req.params;
+    const appointments = await Appointment.find({ patientId }).sort({ date: -1, createdAt: -1 });
+    res.status(200).json(appointments);
+  } catch (error: any) {
+    console.error('[Appointment] getPatientAppointments error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to fetch patient appointments' });
   }
 };
 
@@ -66,6 +81,28 @@ export const updateAppointmentStatus = async (req: Request, res: Response): Prom
     if (!appointment) {
       res.status(404).json({ success: false, message: 'Appointment not found' });
       return;
+    }
+
+    // ── TIMELINE SYNC: auto-create timeline entry when completed ──
+    if (status === 'completed') {
+      const existingEntry = await MedicalRecord.findOne({
+        patientId: appointment.patientId,
+        type: 'consultation',
+        title: { $regex: appointment.appointmentId, $options: 'i' }
+      });
+
+      if (!existingEntry) {
+        await MedicalRecord.create({
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          type: 'consultation',
+          title: `Consultation with ${appointment.doctorName} [${appointment.appointmentId}]`,
+          description: `Completed appointment at ${appointment.hospital}. Time slot: ${appointment.timeSlot}. Date: ${appointment.date}.`,
+          date: new Date(appointment.date),
+          attachments: [],
+        });
+        console.log(`[Timeline] Created timeline entry for completed appointment ${appointment.appointmentId}`);
+      }
     }
 
     res.status(200).json({ success: true, data: appointment });

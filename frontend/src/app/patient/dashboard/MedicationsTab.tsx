@@ -30,7 +30,10 @@ function formatDate(d: string | Date) {
   if (!d) return "—";
   const date = new Date(d);
   if (isNaN(date.getTime())) return String(d);
-  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
 }
 
 const TYPE_ICONS: Record<string, string> = {
