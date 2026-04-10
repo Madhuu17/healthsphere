@@ -31,6 +31,7 @@ import aiRoutes            from './routes/aiRoutes';
 import appointmentRoutes   from './routes/appointmentRoutes';
 import medicalRecordRoutes from './routes/medicalRecordRoutes';
 import reminderRoutes      from './routes/reminderRoutes';
+import notificationRoutes  from './routes/notificationRoutes';
 
 app.use('/api/auth',            authRoutes);
 app.use('/api/patients',        patientRoutes);
@@ -39,6 +40,7 @@ app.use('/api/ai',              aiRoutes);
 app.use('/api/appointments',    appointmentRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/reminders',       reminderRoutes);
+app.use('/api/notifications',   notificationRoutes);
 
 const PORT = process.env.PORT || 5000;
 
