@@ -70,6 +70,17 @@ function calcAge(dob: string): number | null {
   return age;
 }
 
+// Helper to format date explicitly as dd-mm-yyyy
+function formatDate(d) {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 export default function PatientDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab]           = useState("Profile");
@@ -184,7 +195,7 @@ export default function PatientDashboard() {
         const newMsgs: any[] = [];
         if (data.appointments?.length) {
           data.appointments.slice(0,2).forEach((a:any, i:number) => {
-            newMsgs.push({ id:`ap-${i}`, type:"appointment", text:`Reminder: Appointment with ${a.doctorName} on ${a.date} at ${a.timeSlot}`, date: a.date, isNew: true });
+            newMsgs.push({ id:`ap-${i}`, type:"appointment", text:`Reminder: Appointment with ${a.doctorName} on ${formatDate(a.date)} at ${a.timeSlot}`, date: a.date, isNew: true });
           });
         }
         if (data.timeline?.length) {
@@ -399,7 +410,7 @@ export default function PatientDashboard() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-slate-800 leading-normal">{m.text}</p>
-                              <span className="text-[10px] text-slate-400 font-medium mt-1 inline-block">{m.date}</span>
+                              <span className="text-[10px] text-slate-400 font-medium mt-1 inline-block">{formatDate(m.date)}</span>
                             </div>
                             {m.isNew && <div className="w-2 h-2 bg-orange-400 rounded-full mt-1"></div>}
                           </div>
@@ -502,7 +513,7 @@ export default function PatientDashboard() {
                       <tbody className="font-semibold text-slate-700">
                         {timeline.filter(t => t.type==='consultation').slice(0,3).map((a,i)=>(
                           <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                            <td className="py-3">Visit</td><td className="py-3">{a.date?.slice(0,10)}</td><td className="py-3 truncate max-w-[130px]">{a.title?.replace('Appointment with ','')}</td>
+                            <td className="py-3">Visit</td><td className="py-3">{formatDate(a.date)}</td><td className="py-3 truncate max-w-[130px]">{a.title?.replace('Appointment with ','')}</td>
                             <td className="py-3"><span className="px-2 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-600">Scheduled</span></td>
                           </tr>
                         ))}
@@ -530,7 +541,7 @@ export default function PatientDashboard() {
                     <tbody className="font-semibold text-slate-700">
                         {timeline.slice(0,4).map((r,i)=>(
                           <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 cursor-pointer" onClick={()=>setShowRecord(r)}>
-                            <td className="py-3 text-slate-500 whitespace-nowrap">{r.date?.slice(0,10)}</td>
+                            <td className="py-3 text-slate-500 whitespace-nowrap">{formatDate(r.date)}</td>
                             <td className="py-3 truncate max-w-[180px]">{r.title}</td>
                           </tr>
                         ))}
@@ -607,7 +618,7 @@ export default function PatientDashboard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <CalendarIcon size={13} className="text-slate-400 shrink-0"/>
-                          <p className="text-slate-600"><span className="font-semibold text-slate-700">Date: </span>{a.date}</p>
+                          <p className="text-slate-600"><span className="font-semibold text-slate-700">Date: </span>{formatDate(a.date)}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock size={13} className="text-slate-400 shrink-0"/>
@@ -679,7 +690,7 @@ export default function PatientDashboard() {
                                 {rec.type?.replace("_", " ")}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500 mt-0.5">{rec.date?.slice(0, 10)}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{formatDate(rec.date)}</p>
                             <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{rec.description || rec.notes}</p>
                           </div>
                         </div>
@@ -786,7 +797,7 @@ export default function PatientDashboard() {
                           </div>
                           <h4 className="font-bold text-slate-800 text-base mb-1">{rx.title}</h4>
                           <p className="text-slate-500 text-xs mb-1 line-clamp-2">{rx.description || rx.notes}</p>
-                          <p className="text-slate-400 text-xs mb-4">{rx.date?.slice(0,10)}</p>
+                          <p className="text-slate-400 text-xs mb-4">{formatDate(rx.date)}</p>
 
                           {/* Summarize or View Summary */}
                           {!hasSummary ? (
@@ -951,7 +962,7 @@ export default function PatientDashboard() {
                             m.type === "appointment" ? "text-teal-500" :
                             "text-purple-500"
                           }`}>{m.type.replace('_',' ')}</span>
-                          <span className="text-xs text-slate-400 font-bold">{m.date}</span>
+                          <span className="text-xs text-slate-400 font-bold">{formatDate(m.date)}</span>
                         </div>
                         <p className={`text-base font-semibold leading-snug ${m.isNew ? "text-slate-800" : "text-slate-600"}`}>{m.text}</p>
                       </div>
@@ -1170,7 +1181,7 @@ export default function PatientDashboard() {
                 showRecord.type==="prescription"?"bg-purple-50 text-purple-600":
                 "bg-teal-50 text-teal-600"}`}>{showRecord.type.replace("_"," ")}</span>
               <h2 className="text-2xl font-bold text-slate-800 mb-2">{showRecord.title}</h2>
-              <p className="text-slate-500 text-sm mb-5">{showRecord.doctor} · {showRecord.date}</p>
+              <p className="text-slate-500 text-sm mb-5">{showRecord.doctor} · {formatDate(showRecord.date)}</p>
               {showRecord.imageUrl && <img src={showRecord.imageUrl} alt="Medical Record" className="w-full h-56 object-cover rounded-2xl mb-5 border border-slate-100"/>}
               {showRecord.notes && <div className="bg-slate-50 rounded-2xl p-4 text-sm text-slate-700 border border-slate-100">{showRecord.notes}</div>}
             </motion.div>

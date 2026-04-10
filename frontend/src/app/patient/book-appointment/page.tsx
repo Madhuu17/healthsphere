@@ -43,6 +43,17 @@ const TIME_SLOTS = [
   "05:00 PM", "05:30 PM",
 ];
 
+// Helper to format date explicitly as dd-mm-yyyy
+function formatDate(d) {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 export default function BookAppointmentPage() {
   const router      = useRouter();
   const searchParams = useSearchParams();
@@ -362,7 +373,7 @@ export default function BookAppointmentPage() {
                         <input
                           type="date"
                           min={today}
-                          value={form.date}
+                          value={formatDate(form.date)}
                           onChange={(e) => set("date", e.target.value)}
                           required
                           className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all cursor-pointer"

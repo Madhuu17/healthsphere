@@ -41,6 +41,17 @@ const TYPE_META: Record<string, { color: string; bg: string; icon: any }> = {
   vaccination:  { color: "text-green-600",  bg: "bg-green-100",  icon: Heart },
 };
 
+// Helper to format date explicitly as dd-mm-yyyy
+function formatDate(d) {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 export default function DoctorDashboard() {
   const router = useRouter();
 
@@ -422,7 +433,7 @@ export default function DoctorDashboard() {
                         {appointments.slice(0, 8).map((a: any, i: number) => (
                           <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <td className="py-3.5 font-bold text-slate-800">{a.patientName}</td>
-                            <td className="py-3.5 text-slate-500">{a.date}</td>
+                            <td className="py-3.5 text-slate-500">{formatDate(a.date)}</td>
                             <td className="py-3.5 text-slate-500">{a.timeSlot}</td>
                             <td className="py-3.5 text-slate-500 truncate max-w-[150px]">{a.hospital}</td>
                             <td className="py-3.5">
