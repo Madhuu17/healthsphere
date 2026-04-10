@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, X, Plus, Pill, FileText, Clock,
   LogOut, Activity, AlertCircle, Lock, Unlock, Image as ImageIcon,
   Users, Star, TrendingUp, Award, Phone, Mail, Paperclip, Send,
-  BarChart2, Heart, BriefcaseMedical
+  BarChart2, Heart, BriefcaseMedical, Trash2, Timer
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -83,6 +83,16 @@ export default function DoctorDashboard() {
   const [uploading, setUploading]     = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  /* ── Prescription builder ── */
+  const emptyMed = { medicineName: "", type: "tablet", dosage: "", frequency: "", instructions: "", durationDays: "" };
+  const [rxTitle, setRxTitle] = useState("");
+  const [rxNotes, setRxNotes] = useState("");
+  const [rxMeds, setRxMeds]   = useState([{ ...emptyMed }]);
+  const addMed    = () => setRxMeds(prev => [...prev, { ...emptyMed }]);
+  const removeMed = (i: number) => setRxMeds(prev => prev.filter((_, idx) => idx !== i));
+  const updateMed = (i: number, field: string, val: string) =>
+    setRxMeds(prev => prev.map((m, idx) => idx === i ? { ...m, [field]: val } : m));
 
   /* ── Helpers ── */
   const today = toYMD(new Date());
@@ -183,6 +193,11 @@ export default function DoctorDashboard() {
 
   /* ── Add record with file upload ── */
   const handleAddRecord = async () => {
+    // If it's a prescription type, use the prescription builder flow
+    if (newRecord.type === "prescription") {
+      await handleAddPrescription();
+      return;
+    }
     if (!patientData || !doctor || !newRecord.title || !newRecord.description) return;
     setUploading(true);
     try {
@@ -204,6 +219,65 @@ export default function DoctorDashboard() {
       setShowAddRecord(false);
       setNewRecord({ type: "prescription", title: "", description: "" });
       setAttachedFiles([]);
+    } catch (err: any) { alert(err.message); }
+    finally { setUploading(false); }
+  };
+
+  /* ── Add prescription with duration-tracked medicines ── */
+  const handleAddPrescription = async () => {
+    if (!patientData || !doctor) return;
+    if (!rxTitle.trim()) { alert("Please enter a prescription title."); return; }
+    const validMeds = rxMeds.filter(m => m.medicineName && m.dosage && m.frequency && m.durationDays);
+    if (validMeds.length === 0) { alert("Please add at least one medicine with all required fields."); return; }
+
+    setUploading(true);
+    try {
+      // 1) Create the duration-tracked prescription
+      const rxRes = await fetch(`${API}/api/prescriptions/${patientData.patientId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doctorId: doctor.id,
+          doctorName: doctor.name,
+          prescriptionTitle: rxTitle,
+          notes: rxNotes,
+          medicines: validMeds.map(m => ({
+            medicineName: m.medicineName,
+            type: m.type,
+            dosage: m.dosage,
+            frequency: m.frequency,
+            instructions: m.instructions,
+            durationDays: Number(m.durationDays),
+          })),
+        }),
+      });
+      const rxData = await rxRes.json();
+      if (!rxRes.ok) throw new Error(rxData.message);
+
+      // 2) Also add a medical record for timeline visibility
+      const medSummary = validMeds.map(m => `• ${m.medicineName} (${m.type}) — ${m.dosage}, ${m.frequency}, ${m.durationDays} days`).join("\n");
+      const fd = new FormData();
+      fd.append("patientId",   patientData.patientId);
+      fd.append("doctorId",    doctor.id);
+      fd.append("doctorName",  doctor.name);
+      fd.append("type",        "prescription");
+      fd.append("title",       rxTitle);
+      fd.append("description", `${rxNotes ? rxNotes + "\n\n" : ""}Medicines Prescribed:\n${medSummary}`);
+      fd.append("date",        new Date().toISOString());
+      attachedFiles.forEach(f => fd.append("attachments", f));
+
+      const recRes = await fetch(`${API}/api/doctor/add-record`, { method: "POST", body: fd });
+      const recData = await recRes.json();
+      if (recRes.ok) setPatientTimeline(prev => [recData.record, ...prev]);
+
+      // Cleanup
+      setShowAddRecord(false);
+      setNewRecord({ type: "prescription", title: "", description: "" });
+      setAttachedFiles([]);
+      setRxTitle("");
+      setRxNotes("");
+      setRxMeds([{ ...emptyMed }]);
+      alert("✅ Prescription created with duration tracking!");
     } catch (err: any) { alert(err.message); }
     finally { setUploading(false); }
   };
@@ -671,73 +745,225 @@ export default function DoctorDashboard() {
                           <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
                             <Plus size={20} className="text-blue-600"/> New Medical Record
                           </h3>
-                          <button onClick={() => { setShowAddRecord(false); setAttachedFiles([]); }}
+                          <button onClick={() => { setShowAddRecord(false); setAttachedFiles([]); setRxMeds([{...emptyMed}]); setRxTitle(""); setRxNotes(""); }}
                             className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200">
                             <X size={16}/>
                           </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 mb-1.5">Record Type</label>
-                            <select value={newRecord.type} onChange={e => setNewRecord(r => ({...r, type: e.target.value}))}
-                              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm bg-slate-50">
-                              <option value="prescription">💊 Prescription</option>
-                              <option value="consultation">🩺 Consultation Note</option>
-                              <option value="lab_report">🔬 Lab Report</option>
-                              <option value="xray">🩻 X-Ray / Scan</option>
-                              <option value="vaccination">💉 Vaccination</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-600 mb-1.5">Title / Medicine Name</label>
-                            <input type="text" value={newRecord.title} onChange={e => setNewRecord(r => ({...r, title: e.target.value}))}
-                              placeholder="e.g. Amoxicillin 500mg" required
-                              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm"/>
-                          </div>
-                        </div>
-                        <div className="mb-4">
-                          <label className="block text-xs font-bold text-slate-600 mb-1.5">Description / Dosage / Findings</label>
-                          <textarea value={newRecord.description} onChange={e => setNewRecord(r => ({...r, description: e.target.value}))}
-                            placeholder="Detailed notes, dosage instructions, or clinical findings..." rows={4} required
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-sm resize-none"/>
+
+                        {/* Record Type selector */}
+                        <div className="mb-5">
+                          <label className="block text-xs font-bold text-slate-600 mb-1.5">Record Type</label>
+                          <select value={newRecord.type} onChange={e => setNewRecord(r => ({...r, type: e.target.value}))}
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm bg-slate-50">
+                            <option value="prescription">💊 Prescription</option>
+                            <option value="consultation">🩺 Consultation Note</option>
+                            <option value="lab_report">🔬 Lab Report</option>
+                            <option value="xray">🩻 X-Ray / Scan</option>
+                            <option value="vaccination">💉 Vaccination</option>
+                          </select>
                         </div>
 
-                        {/* File attachments */}
-                        <div className="mb-5">
-                          <label className="block text-xs font-bold text-slate-600 mb-1.5">Attach Images / Reports (X-rays, scans, PDFs)</label>
-                          <input type="file" ref={fileRef} accept="image/*,.pdf" multiple
-                            onChange={e => setAttachedFiles(Array.from(e.target.files || []))}
-                            className="hidden"/>
-                          <button type="button" onClick={() => fileRef.current?.click()}
-                            className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-500 hover:text-blue-600 py-5 rounded-2xl flex flex-col items-center gap-2 transition-all font-medium text-sm group">
-                            <Paperclip size={22} className="group-hover:scale-110 transition-transform"/>
-                            Click to attach files
-                            <span className="text-xs text-slate-400">Images, PDFs · Max 10MB each</span>
-                          </button>
-                          {attachedFiles.length > 0 && (
-                            <div className="mt-3 space-y-2">
-                              {attachedFiles.map((f, i) => (
-                                <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
-                                  <ImageIcon size={14} className="text-blue-500 shrink-0"/>
-                                  <span className="text-xs font-medium text-slate-600 flex-1 truncate">{f.name}</span>
-                                  <span className="text-xs text-slate-400">{(f.size/1024).toFixed(0)} KB</span>
-                                  <button onClick={() => setAttachedFiles(prev => prev.filter((_,j) => j !== i))}
-                                    className="text-slate-300 hover:text-red-400"><X size={12}/></button>
+                        {/* ═══ PRESCRIPTION BUILDER ═══ */}
+                        {newRecord.type === "prescription" ? (
+                          <div className="space-y-5">
+                            {/* Rx Title & Notes */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Prescription Title <span className="text-red-500">*</span></label>
+                                <input type="text" value={rxTitle} onChange={e => setRxTitle(e.target.value)}
+                                  placeholder="e.g. Post-Op Care, Flu Treatment"
+                                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm"/>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Notes (optional)</label>
+                                <input type="text" value={rxNotes} onChange={e => setRxNotes(e.target.value)}
+                                  placeholder="General instructions for the patient"
+                                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-sm"/>
+                              </div>
+                            </div>
+
+                            {/* Duration-tracking info banner */}
+                            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-start gap-2">
+                              <Timer size={14} className="text-purple-500 shrink-0 mt-0.5"/>
+                              <p className="text-purple-700 text-xs font-medium">
+                                <strong>Duration Tracking:</strong> Each medicine requires a duration (in days). The system will automatically move medications from Active → Past when their duration expires.
+                              </p>
+                            </div>
+
+                            {/* Medicines list */}
+                            <div className="space-y-4">
+                              {rxMeds.map((med, idx) => (
+                                <div key={idx} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 relative">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                      <Pill size={12} className="text-purple-500"/> Medicine #{idx + 1}
+                                    </span>
+                                    {rxMeds.length > 1 && (
+                                      <button onClick={() => removeMed(idx)}
+                                        className="w-7 h-7 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all">
+                                        <Trash2 size={13}/>
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <div className="col-span-2">
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">Medicine Name <span className="text-red-500">*</span></label>
+                                      <input type="text" value={med.medicineName} onChange={e => updateMed(idx, "medicineName", e.target.value)}
+                                        placeholder="e.g. Amoxicillin 500mg"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold"/>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">Type</label>
+                                      <select value={med.type} onChange={e => updateMed(idx, "type", e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold bg-white">
+                                        <option value="tablet">💊 Tablet</option>
+                                        <option value="capsule">💊 Capsule</option>
+                                        <option value="syrup">🧪 Syrup</option>
+                                        <option value="injection">💉 Injection</option>
+                                        <option value="drops">💧 Drops</option>
+                                        <option value="ointment">🧴 Ointment</option>
+                                        <option value="other">🩺 Other</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">Dosage <span className="text-red-500">*</span></label>
+                                      <input type="text" value={med.dosage} onChange={e => updateMed(idx, "dosage", e.target.value)}
+                                        placeholder="e.g. 500mg"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold"/>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">Frequency <span className="text-red-500">*</span></label>
+                                      <select value={med.frequency} onChange={e => updateMed(idx, "frequency", e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold bg-white">
+                                        <option value="">Select…</option>
+                                        <option value="Once daily">Once daily</option>
+                                        <option value="Twice daily">Twice daily</option>
+                                        <option value="Three times daily">Three times daily</option>
+                                        <option value="Four times daily">Four times daily</option>
+                                        <option value="Every 8 hours">Every 8 hours</option>
+                                        <option value="Every 12 hours">Every 12 hours</option>
+                                        <option value="Before breakfast">Before breakfast</option>
+                                        <option value="After meals">After meals</option>
+                                        <option value="Before bed">Before bed</option>
+                                        <option value="As needed">As needed (PRN)</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">Duration (days) <span className="text-red-500">*</span></label>
+                                      <input type="number" min={1} max={365} value={med.durationDays} onChange={e => updateMed(idx, "durationDays", e.target.value)}
+                                        placeholder="e.g. 7"
+                                        className="w-full px-3 py-2 border border-purple-200 bg-purple-50/50 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/30 text-sm font-bold text-purple-700"/>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Instructions (optional)</label>
+                                    <input type="text" value={med.instructions} onChange={e => updateMed(idx, "instructions", e.target.value)}
+                                      placeholder="e.g. Take with food, avoid alcohol"
+                                      className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-medium"/>
+                                  </div>
                                 </div>
                               ))}
-                            </div>
-                          )}
-                        </div>
 
-                        <div className="flex gap-3 justify-end">
-                          <button onClick={() => { setShowAddRecord(false); setAttachedFiles([]); }}
-                            className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">Cancel</button>
-                          <button onClick={handleAddRecord}
-                            disabled={uploading || !newRecord.title || !newRecord.description}
-                            className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2 shadow-md shadow-blue-600/20">
-                            <Send size={15}/>{uploading ? "Uploading..." : "Save & Send to Patient"}
-                          </button>
-                        </div>
+                              <button onClick={addMed}
+                                className="w-full border-2 border-dashed border-blue-300 text-blue-600 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-50 transition-all text-sm font-bold">
+                                <Plus size={16}/> Add Another Medicine
+                              </button>
+                            </div>
+
+                            {/* File attachments for prescriptions too */}
+                            <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1.5">Attach Files (optional)</label>
+                              <input type="file" ref={fileRef} accept="image/*,.pdf" multiple
+                                onChange={e => setAttachedFiles(Array.from(e.target.files || []))}
+                                className="hidden"/>
+                              <button type="button" onClick={() => fileRef.current?.click()}
+                                className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-500 hover:text-blue-600 py-4 rounded-2xl flex flex-col items-center gap-1.5 transition-all font-medium text-sm group">
+                                <Paperclip size={18} className="group-hover:scale-110 transition-transform"/>
+                                Click to attach files
+                              </button>
+                              {attachedFiles.length > 0 && (
+                                <div className="mt-2 space-y-1.5">
+                                  {attachedFiles.map((f, i) => (
+                                    <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-200">
+                                      <ImageIcon size={12} className="text-blue-500 shrink-0"/>
+                                      <span className="text-xs font-medium text-slate-600 flex-1 truncate">{f.name}</span>
+                                      <button onClick={() => setAttachedFiles(prev => prev.filter((_,j) => j !== i))} className="text-slate-300 hover:text-red-400"><X size={12}/></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Submit */}
+                            <div className="flex gap-3 justify-end">
+                              <button onClick={() => { setShowAddRecord(false); setAttachedFiles([]); setRxMeds([{...emptyMed}]); setRxTitle(""); setRxNotes(""); }}
+                                className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">Cancel</button>
+                              <button onClick={handleAddRecord}
+                                disabled={uploading || !rxTitle || rxMeds.every(m => !m.medicineName || !m.dosage || !m.frequency || !m.durationDays)}
+                                className="px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 flex items-center gap-2 shadow-md shadow-blue-600/20">
+                                <Send size={15}/>{uploading ? "Saving..." : "Save Prescription"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ═══ NON-PRESCRIPTION RECORD (original form) ═══ */
+                          <>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Title</label>
+                                <input type="text" value={newRecord.title} onChange={e => setNewRecord(r => ({...r, title: e.target.value}))}
+                                  placeholder="e.g. Blood Test Results" required
+                                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm"/>
+                              </div>
+                            </div>
+                            <div className="mb-4">
+                              <label className="block text-xs font-bold text-slate-600 mb-1.5">Description / Findings</label>
+                              <textarea value={newRecord.description} onChange={e => setNewRecord(r => ({...r, description: e.target.value}))}
+                                placeholder="Detailed notes, dosage instructions, or clinical findings..." rows={4} required
+                                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-sm resize-none"/>
+                            </div>
+
+                            {/* File attachments */}
+                            <div className="mb-5">
+                              <label className="block text-xs font-bold text-slate-600 mb-1.5">Attach Images / Reports</label>
+                              <input type="file" ref={fileRef} accept="image/*,.pdf" multiple
+                                onChange={e => setAttachedFiles(Array.from(e.target.files || []))}
+                                className="hidden"/>
+                              <button type="button" onClick={() => fileRef.current?.click()}
+                                className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-500 hover:text-blue-600 py-5 rounded-2xl flex flex-col items-center gap-2 transition-all font-medium text-sm group">
+                                <Paperclip size={22} className="group-hover:scale-110 transition-transform"/>
+                                Click to attach files
+                                <span className="text-xs text-slate-400">Images, PDFs · Max 10MB each</span>
+                              </button>
+                              {attachedFiles.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                  {attachedFiles.map((f, i) => (
+                                    <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
+                                      <ImageIcon size={14} className="text-blue-500 shrink-0"/>
+                                      <span className="text-xs font-medium text-slate-600 flex-1 truncate">{f.name}</span>
+                                      <span className="text-xs text-slate-400">{(f.size/1024).toFixed(0)} KB</span>
+                                      <button onClick={() => setAttachedFiles(prev => prev.filter((_,j) => j !== i))}
+                                        className="text-slate-300 hover:text-red-400"><X size={12}/></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex gap-3 justify-end">
+                              <button onClick={() => { setShowAddRecord(false); setAttachedFiles([]); }}
+                                className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">Cancel</button>
+                              <button onClick={handleAddRecord}
+                                disabled={uploading || !newRecord.title || !newRecord.description}
+                                className="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2 shadow-md shadow-blue-600/20">
+                                <Send size={15}/>{uploading ? "Uploading..." : "Save & Send to Patient"}
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>

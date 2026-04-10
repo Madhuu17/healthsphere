@@ -6,6 +6,7 @@ import Link from "next/link";
 import { UserRound, Calendar as CalendarIcon, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Stethoscope, Sparkles, ChevronDown, ChevronUp, LayoutDashboard, Ruler, Weight, Droplets, Camera, Salad } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import DietPlanTab from "./DietPlanTab";
+import MedicationsTab from "./MedicationsTab";
 
 
 const MOCK_MEDS = [
@@ -856,90 +857,7 @@ export default function PatientDashboard() {
 
           {/* ═══════════ MEDICATIONS TAB ═══════════ */}
           {activeTab === "Medications" && (
-            <div className="space-y-6 max-w-[1400px]">
-              <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-slate-800">Prescribed Medications</h3>
-                  <button className="bg-teal-500 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-teal-600 transition-colors">+ Request Refill</button>
-                </div>
-                {timeline.filter(t=>t.type==="prescription").length === 0 ? (
-                  <div className="text-center py-10">
-                    <Pill size={40} className="mx-auto text-slate-200 mb-3"/>
-                    <p className="text-slate-400 font-medium text-sm">No prescriptions yet. Your doctor will add them here after your visit.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {timeline.filter(t=>t.type==="prescription").map((rx, i) => {
-                      const rxId = rx._id?.toString();
-                      const hasSummary = !!rx.aiSummary;
-                      const isLoading = summarizingId === rxId;
-                      const isExpanded = expandedSummary === rxId;
-                      return (
-                        <div key={`rx-${i}`} className={`border rounded-2xl p-5 transition-all ${
-                          hasSummary ? "border-purple-200 bg-purple-50/20" : "border-purple-100 hover:border-purple-200 hover:bg-purple-50/30"
-                        }`}>
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
-                              <Pill size={18} className="text-purple-600"/>
-                            </div>
-                            {hasSummary && (
-                              <span className="text-[10px] bg-purple-100 text-purple-600 font-black px-2 py-0.5 rounded-full">AI ✓</span>
-                            )}
-                          </div>
-                          <h4 className="font-bold text-slate-800 text-base mb-1">{rx.title}</h4>
-                          <p className="text-slate-500 text-xs mb-1 line-clamp-2">{rx.description || rx.notes}</p>
-                          <p className="text-slate-400 text-xs mb-4">{formatDate(rx.date)}</p>
-
-                          {/* Summarize or View Summary */}
-                          {!hasSummary ? (
-                            <button
-                              onClick={() => handleSummarize(rxId!)}
-                              disabled={isLoading}
-                              className="w-full flex items-center justify-center gap-1.5 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-bold rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-60 transition-all"
-                            >
-                              {isLoading
-                                ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/> Generating...</>
-                                : <><Sparkles size={12}/> Summarize Prescription</>}
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setExpandedSummary(isExpanded ? null : rxId!)}
-                              className="w-full flex items-center justify-center gap-1.5 py-2 bg-purple-100 text-purple-700 text-xs font-bold rounded-xl hover:bg-purple-200 transition-all"
-                            >
-                              <Sparkles size={12}/>
-                              {isExpanded ? "Hide Summary" : "View AI Summary"}
-                              {isExpanded ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
-                            </button>
-                          )}
-
-                          {/* Expanded Summary */}
-                          <AnimatePresence>
-                            {hasSummary && isExpanded && (
-                              <motion.div
-                                initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                                animate={{ opacity: 1, height: "auto", marginTop: 12 }}
-                                exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                                className="overflow-hidden"
-                              >
-                                <div className="bg-gradient-to-br from-violet-50 to-purple-50 border border-purple-200 rounded-xl p-3">
-                                  <div className="flex items-center gap-1.5 mb-2">
-                                    <Sparkles size={10} className="text-purple-500"/>
-                                    <span className="text-[10px] font-black text-purple-600 uppercase tracking-wider">AI Summary</span>
-                                  </div>
-                                  <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-line">
-                                    {rx.aiSummary}
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+            <MedicationsTab profile={profile} />
           )}
 
           {/* ═══════════ TIMELINE TAB ═══════════ */}

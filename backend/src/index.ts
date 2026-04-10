@@ -5,9 +5,13 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import connectDB from './config/db';
 import { startReminderScheduler } from './utils/reminderScheduler';
+import { startMedicationScheduler } from './utils/medicationScheduler';
 
 dotenv.config();
-connectDB().then(() => startReminderScheduler());
+connectDB().then(() => {
+  startReminderScheduler();
+  startMedicationScheduler();
+});
 
 const app = express();
 
@@ -33,6 +37,7 @@ import medicalRecordRoutes from './routes/medicalRecordRoutes';
 import reminderRoutes      from './routes/reminderRoutes';
 import notificationRoutes  from './routes/notificationRoutes';
 import dietPlanRoutes      from './routes/dietPlanRoutes';
+import prescriptionRoutes  from './routes/prescriptionRoutes';
 
 app.use('/api/auth',            authRoutes);
 app.use('/api/patients',        patientRoutes);
@@ -43,6 +48,7 @@ app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/reminders',       reminderRoutes);
 app.use('/api/notifications',   notificationRoutes);
 app.use('/api/diet-plans',      dietPlanRoutes);
+app.use('/api/prescriptions',   prescriptionRoutes);
 
 const PORT = process.env.PORT || 5000;
 
