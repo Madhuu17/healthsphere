@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserRound, Calendar as CalendarIcon, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Stethoscope, Sparkles, ChevronDown, ChevronUp, LayoutDashboard, Ruler, Weight, Droplets, Camera } from "lucide-react";
+import { UserRound, Calendar as CalendarIcon, FileText, Pill, Settings, LogOut, Search, Bell, Mail, Eye, Edit2, Trash2, Activity, CheckCircle2, X, QrCode, MapPin, Building2, User, Clock, AlertCircle, Stethoscope, Sparkles, ChevronDown, ChevronUp, LayoutDashboard, Ruler, Weight, Droplets, Camera, Salad } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import DietPlanTab from "./DietPlanTab";
 
 
 const MOCK_MEDS = [
@@ -71,7 +72,7 @@ function calcAge(dob: string): number | null {
 }
 
 // Helper to format date explicitly as dd-mm-yyyy
-function formatDate(d) {
+function formatDate(d: string | Date | null | undefined) {
   if (!d) return "";
   const date = new Date(d);
   if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
@@ -370,6 +371,7 @@ export default function PatientDashboard() {
     { name:"Medical Records",icon:FileText },
     { name:"Medications",    icon:Pill },
     { name:"Timeline",       icon:Activity },
+    { name:"Diet Plan",      icon:Salad },
     { name:"Messages",       icon:Mail }
   ];
 
@@ -511,6 +513,7 @@ export default function PatientDashboard() {
             {activeTab === "Medical Records" && <FileText size={28} className="text-teal-500" />}
             {activeTab === "Medications" && <Pill size={28} className="text-teal-500" />}
             {activeTab === "Timeline" && <Activity size={28} className="text-teal-500" />}
+            {activeTab === "Diet Plan" && <Salad size={28} className="text-teal-500" />}
             {activeTab === "Messages" && <Mail size={28} className="text-teal-500" />}
             {activeTab}
           </h2>
@@ -1072,6 +1075,17 @@ export default function PatientDashboard() {
                 )}
               </div>
             </div>
+          )}
+          {/* ═══════════ DIET PLAN TAB ═══════════ */}
+          {activeTab === "Diet Plan" && (
+            <DietPlanTab
+              profile={profile}
+              onProfileUpdate={(updated) => {
+                setProfile({ ...updated, id: updated.patientId });
+                setEditHeight(updated.height ? String(updated.height) : "");
+                setEditWeight(updated.weight ? String(updated.weight) : "");
+              }}
+            />
           )}
         </div>
       </main>
