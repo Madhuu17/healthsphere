@@ -41,7 +41,7 @@ export default function DoctorSetupProfile() {
     if (!userStr) { router.push("/login"); return; }
     const user = JSON.parse(userStr);
     if (user.role !== "doctor") { router.push("/login"); return; }
-    if (user.isProfileCompleted) { router.push("/doctor/dashboard"); return; }
+    if (user.isProfileCompleted) { router.push("/doctor/overview"); return; }
     setDoctorId(user.id || user.doctorId);
   }, [router]);
 
@@ -84,7 +84,7 @@ export default function DoctorSetupProfile() {
         const user = JSON.parse(userStr);
         localStorage.setItem("user", JSON.stringify({ ...user, isProfileCompleted: true }));
       }
-      router.push("/doctor/dashboard");
+      router.push("/doctor/overview");
     } catch (err: any) {
       setError(err.message);
     } finally {

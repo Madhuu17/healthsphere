@@ -24,11 +24,11 @@ interface DoctorMatchResult {
 }
 
 const NAV_LINKS = [
-  { label: "Profile",         href: "/patient/dashboard", icon: UserRound },
-  { label: "Appointments",    href: "/patient/dashboard", icon: Calendar },
-  { label: "Medical Records", href: "/patient/dashboard", icon: FileText },
-  { label: "Medications",     href: "/patient/dashboard", icon: Pill },
-  { label: "Messages",        href: "/patient/dashboard", icon: Mail },
+  { label: "Profile",         href: "/patient/overview", icon: UserRound },
+  { label: "Appointments",    href: "/patient/appointments", icon: Calendar },
+  { label: "Medical Records", href: "/patient/medical-records", icon: FileText },
+  { label: "Medications",     href: "/patient/medications", icon: Pill },
+  { label: "Messages",        href: "/patient/messages", icon: Mail },
 ];
 
 const severityColor = (s: number) =>
@@ -128,7 +128,7 @@ export default function SymptomCheckerPage() {
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {/* Back to Dashboard */}
-          <Link href="/patient/dashboard"
+          <Link href="/patient/overview"
             className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-all font-semibold text-left mb-1">
             <ArrowLeft size={20} className="text-slate-400" />
             <span className="flex-1">Back to Dashboard</span>

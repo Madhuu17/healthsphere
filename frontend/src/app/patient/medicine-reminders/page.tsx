@@ -194,7 +194,7 @@ export default function MedicineRemindersPage() {
 
       {/* ── Header ── */}
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center gap-5 sticky top-0 z-40">
-        <Link href="/patient/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-teal-600 transition-colors font-semibold text-sm">
+        <Link href="/patient/overview" className="flex items-center gap-2 text-slate-500 hover:text-teal-600 transition-colors font-semibold text-sm">
           <ArrowLeft size={18} /> Dashboard
         </Link>
         <div className="w-px h-5 bg-slate-200" />

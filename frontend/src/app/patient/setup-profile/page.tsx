@@ -50,7 +50,7 @@ export default function PatientSetupProfile() {
     const user = JSON.parse(userStr);
     if (user.role !== "patient") { router.push("/login"); return; }
     // If already completed, skip to dashboard
-    if (user.isProfileCompleted) { router.push("/patient/dashboard"); return; }
+    if (user.isProfileCompleted) { router.push("/patient/overview"); return; }
     setPatientId(user.id || user.patientId);
   }, [router]);
 
@@ -99,7 +99,7 @@ export default function PatientSetupProfile() {
         const user = JSON.parse(userStr);
         localStorage.setItem("user", JSON.stringify({ ...user, isProfileCompleted: true }));
       }
-      router.push("/patient/dashboard");
+      router.push("/patient/overview");
     } catch (err: any) {
       setError(err.message);
     } finally {

@@ -32,15 +32,17 @@ export default function LoginPage() {
 
       // Save user info (includes isProfileCompleted)
       localStorage.setItem("user", JSON.stringify({ ...data, role }));
+      if (email) localStorage.setItem("userEmail", email);
+      if (data.name) localStorage.setItem("userName", data.name);
       localStorage.setItem("isLoggedIn", "true");
 
       // 🔑 First-time login → go to profile setup; else go to dashboard
       if (!data.isProfileCompleted) {
         router.push(`/${role}/setup-profile`);
       } else if (role === "patient") {
-        router.push("/patient/dashboard");
+        router.push("/patient/overview");
       } else {
-        router.push("/doctor/dashboard");
+        router.push("/doctor/overview");
       }
     } catch (err: any) {
       setError(err.message);

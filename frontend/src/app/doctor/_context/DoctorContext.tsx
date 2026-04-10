@@ -1,0 +1,307 @@
+"use client";
+
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+
+const API = "http://localhost:5000";
+const SLOT_TIMES = ["09:00 AM","09:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM",
+                    "12:00 PM","02:00 PM","02:30 PM","03:00 PM","03:30 PM","04:00 PM"];
+
+function getWeekDates(offset = 0) {
+  const today = new Date();
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() - today.getDay() + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() + i);
+    return d;
+  });
+}
+
+function toYMD(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function formatDate(d: any) {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+interface DoctorContextType {
+  doctor: any;
+  doctorProfile: any;
+  // Schedule
+  weekOffset: number; setWeekOffset: (v: any) => void;
+  weekDates: Date[];
+  appointments: any[];
+  activeSlot: string | null; setActiveSlot: (v: string | null) => void;
+  blockedDates: string[];
+  leaveMode: boolean; setLeaveMode: (v: boolean) => void;
+  toggleBlock: (date: string) => Promise<void>;
+  getSlotsForDay: (date: Date) => any[];
+  isExpiredSlot: (date: Date, slot: string) => boolean;
+  totalApptThisWeek: number;
+  // Patient access
+  searchId: string; setSearchId: (v: string) => void;
+  otp: string[]; setOtp: (v: string[]) => void;
+  accessStep: "search" | "otp" | "view"; setAccessStep: (v: any) => void;
+  accessError: string; setAccessError: (v: string) => void;
+  accessLoading: boolean;
+  patientData: any; setPatientData: (v: any) => void;
+  patientTimeline: any[]; setPatientTimeline: (v: any) => void;
+  handleSearch: (e: React.FormEvent) => Promise<void>;
+  handleVerify: (e: React.FormEvent) => Promise<void>;
+  // Add Record
+  showAddRecord: boolean; setShowAddRecord: (v: boolean) => void;
+  newRecord: any; setNewRecord: (v: any) => void;
+  uploading: boolean;
+  attachedFiles: File[]; setAttachedFiles: (v: any) => void;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  handleAddRecord: () => Promise<void>;
+  // Prescription builder
+  rxTitle: string; setRxTitle: (v: string) => void;
+  rxNotes: string; setRxNotes: (v: string) => void;
+  rxMeds: any[]; setRxMeds: (v: any) => void;
+  addMed: () => void;
+  removeMed: (i: number) => void;
+  updateMed: (i: number, field: string, val: string) => void;
+  emptyMed: any;
+  // Helpers
+  handleLogout: () => void;
+  formatDate: (d: any) => string;
+  toYMD: (d: Date) => string;
+  today: string;
+  dayNames: string[];
+  SLOT_TIMES: string[];
+  API: string;
+}
+
+const DoctorContext = createContext<DoctorContextType | null>(null);
+
+export function useDoctor() {
+  const ctx = useContext(DoctorContext);
+  if (!ctx) throw new Error("useDoctor must be used inside <DoctorProvider>");
+  return ctx;
+}
+
+export function DoctorProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+
+  const [doctor, setDoctor] = useState<any>(null);
+  const [doctorProfile, setDoctorProfile] = useState<any>(null);
+
+  // Schedule
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekDates, setWeekDates] = useState<Date[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [activeSlot, setActiveSlot] = useState<string | null>(null);
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [leaveMode, setLeaveMode] = useState(false);
+
+  // Patient access
+  const [searchId, setSearchId] = useState("");
+  const [otp, setOtp] = useState(["","","","","",""]);
+  const [accessStep, setAccessStep] = useState<"search"|"otp"|"view">("search");
+  const [accessError, setAccessError] = useState("");
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [patientData, setPatientData] = useState<any>(null);
+  const [patientTimeline, setPatientTimeline] = useState<any[]>([]);
+
+  // Add Record
+  const [showAddRecord, setShowAddRecord] = useState(false);
+  const [newRecord, setNewRecord] = useState({ type: "prescription", title: "", description: "" });
+  const [uploading, setUploading] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Prescription builder
+  const emptyMed = { medicineName: "", type: "tablet", dosage: "", frequency: "", instructions: "", durationDays: "" };
+  const [rxTitle, setRxTitle] = useState("");
+  const [rxNotes, setRxNotes] = useState("");
+  const [rxMeds, setRxMeds] = useState([{ ...emptyMed }]);
+  const addMed = () => setRxMeds((prev: any[]) => [...prev, { ...emptyMed }]);
+  const removeMed = (i: number) => setRxMeds((prev: any[]) => prev.filter((_: any, idx: number) => idx !== i));
+  const updateMed = (i: number, field: string, val: string) =>
+    setRxMeds((prev: any[]) => prev.map((m: any, idx: number) => idx === i ? { ...m, [field]: val } : m));
+
+  const todayStr = toYMD(new Date());
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  const fetchSchedule = useCallback(async (doctorId: string) => {
+    try {
+      const res = await fetch(`${API}/api/doctor/schedule/${doctorId}`);
+      const data = await res.json();
+      setAppointments(Array.isArray(data) ? data : []);
+    } catch {}
+  }, []);
+
+  const fetchProfile = useCallback(async (doctorId: string) => {
+    try {
+      const res = await fetch(`${API}/api/doctor/profile/${doctorId}`);
+      const data = await res.json();
+      setDoctorProfile(data);
+      if (data.blockedDates) setBlockedDates(data.blockedDates);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    if (!user || user.role !== "doctor") { router.push("/login"); return; }
+    if (!user.isProfileCompleted) { router.push("/doctor/setup-profile"); return; }
+    setDoctor(user);
+    fetchSchedule(user.id);
+    fetchProfile(user.id);
+  }, []);
+
+  useEffect(() => {
+    setWeekDates(getWeekDates(weekOffset));
+    if (doctor) fetchSchedule(doctor.id);
+  }, [weekOffset, doctor]);
+
+  const toggleBlock = async (date: string) => {
+    if (!doctor) return;
+    const nb = blockedDates.includes(date) ? blockedDates.filter(d => d !== date) : [...blockedDates, date];
+    setBlockedDates(nb);
+    await fetch(`${API}/api/doctor/blocked-dates`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doctorId: doctor.id, blockedDates: nb })
+    });
+  };
+
+  const getSlotsForDay = (date: Date) => appointments.filter(a => a.date === toYMD(date));
+
+  const isExpiredSlot = (date: Date, slot: string) => {
+    const [time, period] = slot.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    const dt = new Date(date); dt.setHours(h, m, 0, 0);
+    return new Date() > dt;
+  };
+
+  const totalApptThisWeek = weekDates.reduce((acc, d) => acc + getSlotsForDay(d).length, 0);
+
+  // Patient OTP access
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccessLoading(true); setAccessError("");
+    try {
+      const res = await fetch(`${API}/api/doctor/search`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: searchId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setAccessStep("otp");
+    } catch (err: any) { setAccessError(err.message); }
+    finally { setAccessLoading(false); }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccessLoading(true); setAccessError("");
+    try {
+      const res = await fetch(`${API}/api/doctor/verify`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: searchId, otp: otp.join("") })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setPatientData(data.patient);
+      setPatientTimeline(data.timeline || []);
+      setAccessStep("view");
+    } catch (err: any) { setAccessError(err.message); }
+    finally { setAccessLoading(false); }
+  };
+
+  // Add record (prescription or other)
+  const handleAddPrescription = async () => {
+    if (!patientData || !doctor) return;
+    if (!rxTitle.trim()) { alert("Please enter a prescription title."); return; }
+    const validMeds = rxMeds.filter((m: any) => m.medicineName && m.dosage && m.frequency && m.durationDays);
+    if (validMeds.length === 0) { alert("Please add at least one medicine with all required fields."); return; }
+    setUploading(true);
+    try {
+      const rxRes = await fetch(`${API}/api/prescriptions/${patientData.patientId}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorId: doctor.id, doctorName: doctor.name, prescriptionTitle: rxTitle, notes: rxNotes,
+          medicines: validMeds.map((m: any) => ({ medicineName: m.medicineName, type: m.type, dosage: m.dosage, frequency: m.frequency, instructions: m.instructions, durationDays: Number(m.durationDays) })),
+        }),
+      });
+      const rxData = await rxRes.json();
+      if (!rxRes.ok) throw new Error(rxData.message);
+      const medSummary = validMeds.map((m: any) => `• ${m.medicineName} (${m.type}) — ${m.dosage}, ${m.frequency}, ${m.durationDays} days`).join("\n");
+      const fd = new FormData();
+      fd.append("patientId", patientData.patientId); fd.append("doctorId", doctor.id);
+      fd.append("doctorName", doctor.name); fd.append("type", "prescription");
+      fd.append("title", rxTitle);
+      fd.append("description", `${rxNotes ? rxNotes + "\n\n" : ""}Medicines Prescribed:\n${medSummary}`);
+      fd.append("date", new Date().toISOString());
+      attachedFiles.forEach(f => fd.append("attachments", f));
+      const recRes = await fetch(`${API}/api/doctor/add-record`, { method: "POST", body: fd });
+      const recData = await recRes.json();
+      if (recRes.ok) setPatientTimeline((prev: any[]) => [recData.record, ...prev]);
+      setShowAddRecord(false); setNewRecord({ type: "prescription", title: "", description: "" });
+      setAttachedFiles([]); setRxTitle(""); setRxNotes(""); setRxMeds([{ ...emptyMed }]);
+      alert("✅ Prescription created with duration tracking!");
+    } catch (err: any) { alert(err.message); }
+    finally { setUploading(false); }
+  };
+
+  const handleAddRecord = async () => {
+    if (newRecord.type === "prescription") { await handleAddPrescription(); return; }
+    if (!patientData || !doctor || !newRecord.title || !newRecord.description) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("patientId", patientData.patientId); fd.append("doctorId", doctor.id);
+      fd.append("doctorName", doctor.name); fd.append("type", newRecord.type);
+      fd.append("title", newRecord.title); fd.append("description", newRecord.description);
+      fd.append("date", new Date().toISOString());
+      attachedFiles.forEach(f => fd.append("attachments", f));
+      const res = await fetch(`${API}/api/doctor/add-record`, { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setPatientTimeline((prev: any[]) => [data.record, ...prev]);
+      setShowAddRecord(false); setNewRecord({ type: "prescription", title: "", description: "" });
+      setAttachedFiles([]);
+    } catch (err: any) { alert(err.message); }
+    finally { setUploading(false); }
+  };
+
+  const handleLogout = () => { localStorage.removeItem("user"); router.push("/login"); };
+
+  if (!doctor) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="flex items-center gap-3 text-blue-600 font-bold text-lg">
+        <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"/>
+        Loading Dashboard...
+      </div>
+    </div>
+  );
+
+  return (
+    <DoctorContext.Provider value={{
+      doctor, doctorProfile,
+      weekOffset, setWeekOffset, weekDates, appointments, activeSlot, setActiveSlot,
+      blockedDates, leaveMode, setLeaveMode, toggleBlock, getSlotsForDay, isExpiredSlot, totalApptThisWeek,
+      searchId, setSearchId, otp, setOtp, accessStep, setAccessStep, accessError, setAccessError,
+      accessLoading, patientData, setPatientData, patientTimeline, setPatientTimeline,
+      handleSearch, handleVerify,
+      showAddRecord, setShowAddRecord, newRecord, setNewRecord, uploading, attachedFiles, setAttachedFiles,
+      fileRef, handleAddRecord,
+      rxTitle, setRxTitle, rxNotes, setRxNotes, rxMeds, setRxMeds, addMed, removeMed, updateMed, emptyMed,
+      handleLogout, formatDate, toYMD, today: todayStr, dayNames, SLOT_TIMES, API,
+    }}>
+      {children}
+    </DoctorContext.Provider>
+  );
+}

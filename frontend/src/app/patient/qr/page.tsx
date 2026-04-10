@@ -14,7 +14,7 @@ export default function PatientQRPage() {
       <div className="absolute top-0 w-full h-96 bg-red-600 rounded-b-[4rem] -z-10 shadow-2xl shadow-red-600/20"></div>
 
       <div className="max-w-md w-full">
-        <Link href="/patient/dashboard" className="inline-flex items-center gap-2 text-white/80 hover:text-white font-medium mb-8 transition-colors">
+        <Link href="/patient/overview" className="inline-flex items-center gap-2 text-white/80 hover:text-white font-medium mb-8 transition-colors">
           <ArrowLeft size={20} /> Back to Dashboard
         </Link>
 

@@ -10,11 +10,11 @@ import {
 } from "lucide-react";
 
 const NAV_LINKS = [
-  { label: "Profile",         href: "/patient/dashboard", icon: UserRound },
-  { label: "Appointments",    href: "/patient/dashboard", icon: Calendar },
-  { label: "Medical Records", href: "/patient/dashboard", icon: FileText },
-  { label: "Medications",     href: "/patient/dashboard", icon: Pill },
-  { label: "Messages",        href: "/patient/dashboard", icon: Mail },
+  { label: "Profile",         href: "/patient/overview", icon: UserRound },
+  { label: "Appointments",    href: "/patient/appointments", icon: Calendar },
+  { label: "Medical Records", href: "/patient/medical-records", icon: FileText },
+  { label: "Medications",     href: "/patient/medications", icon: Pill },
+  { label: "Messages",        href: "/patient/messages", icon: Mail },
 ];
 
 const DOCTOR_TYPES = [
@@ -44,7 +44,7 @@ const TIME_SLOTS = [
 ];
 
 // Helper to format date explicitly as dd-mm-yyyy
-function formatDate(d) {
+function formatDate(d: any) {
   if (!d) return "";
   const date = new Date(d);
   if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
@@ -145,7 +145,7 @@ export default function BookAppointmentPage() {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-          <Link href="/patient/dashboard"
+          <Link href="/patient/overview"
             className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-all font-semibold text-left mb-1">
             <ArrowLeft size={20} className="text-slate-400" />
             <span className="flex-1">Back to Dashboard</span>
@@ -261,7 +261,7 @@ export default function BookAppointmentPage() {
                       Book Another
                     </button>
                     <Link
-                      href="/patient/dashboard"
+                      href="/patient/overview"
                       className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-bold hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm text-sm flex items-center justify-center"
                     >
                       Go to Dashboard
@@ -285,31 +285,22 @@ export default function BookAppointmentPage() {
 
                   <form onSubmit={handleSubmit} className="space-y-6">
 
-                    {/* Patient Name (read-only if logged in) */}
+                    {/* Patient Name */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
                         Patient Name <span className="text-red-400">*</span>
                       </label>
-                      <input
-                        type="text"
-                        value={patientName}
-                        onChange={(e) => setPatientName(e.target.value)}
-                        placeholder="Your full name"
-                        required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all"
-                      />
+                      <input type="text" value={patientName} onChange={(e) => setPatientName(e.target.value)}
+                        placeholder="Your full name" required
+                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all" />
                     </div>
 
                     {/* Symptoms */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">Symptoms</label>
-                      <textarea
-                        value={form.symptoms}
-                        onChange={(e) => set("symptoms", e.target.value)}
-                        placeholder="Briefly describe your symptoms (optional)"
-                        rows={3}
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all resize-none"
-                      />
+                      <textarea value={form.symptoms} onChange={(e) => set("symptoms", e.target.value)}
+                        placeholder="Briefly describe your symptoms (optional)" rows={3}
+                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all resize-none" />
                     </div>
 
                     {/* Doctor Type */}
@@ -317,20 +308,12 @@ export default function BookAppointmentPage() {
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
                         Specialist Type <span className="text-red-400">*</span>
                       </label>
-                      <select
-                        value={form.doctorType}
-                        onChange={(e) => set("doctorType", e.target.value)}
-                        required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer"
-                      >
-                        {DOCTOR_TYPES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
+                      <select value={form.doctorType} onChange={(e) => set("doctorType", e.target.value)} required
+                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer">
+                        {DOCTOR_TYPES.map((t) => (<option key={t} value={t}>{t}</option>))}
                       </select>
                       {prefillDoctorType && (
-                        <p className="text-xs text-teal-600 font-semibold mt-1.5 flex items-center gap-1">
-                          ✨ Pre-filled from AI symptom analysis
-                        </p>
+                        <p className="text-xs text-teal-600 font-semibold mt-1.5 flex items-center gap-1">✨ Pre-filled from AI symptom analysis</p>
                       )}
                     </div>
 
@@ -339,14 +322,9 @@ export default function BookAppointmentPage() {
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
                         Doctor Name <span className="text-red-400">*</span>
                       </label>
-                      <input
-                        type="text"
-                        value={form.doctorName}
-                        onChange={(e) => set("doctorName", e.target.value)}
-                        placeholder="e.g. Dr. Aditi Verma"
-                        required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all"
-                      />
+                      <input type="text" value={form.doctorName} onChange={(e) => set("doctorName", e.target.value)}
+                        placeholder="e.g. Dr. Aditi Verma" required
+                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all" />
                     </div>
 
                     {/* Hospital */}
@@ -354,46 +332,24 @@ export default function BookAppointmentPage() {
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
                         Hospital / Clinic <span className="text-red-400">*</span>
                       </label>
-                      <input
-                        type="text"
-                        value={form.hospital}
-                        onChange={(e) => set("hospital", e.target.value)}
-                        placeholder="e.g. Lilavati Hospital, Mumbai"
-                        required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all"
-                      />
+                      <input type="text" value={form.hospital} onChange={(e) => set("hospital", e.target.value)}
+                        placeholder="e.g. Lilavati Hospital, Mumbai" required
+                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all" />
                     </div>
 
                     {/* Date + Time row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                          Date <span className="text-red-400">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          min={today}
-                          value={formatDate(form.date)}
-                          onChange={(e) => set("date", e.target.value)}
-                          required
-                          className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all cursor-pointer"
-                        />
+                        <label className="block text-sm font-bold text-slate-700 mb-1.5">Date <span className="text-red-400">*</span></label>
+                        <input type="date" min={today} value={form.date} onChange={(e) => set("date", e.target.value)} required
+                          className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all cursor-pointer" />
                       </div>
-
                       <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                          Time Slot <span className="text-red-400">*</span>
-                        </label>
-                        <select
-                          value={form.timeSlot}
-                          onChange={(e) => set("timeSlot", e.target.value)}
-                          required
-                          className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer"
-                        >
+                        <label className="block text-sm font-bold text-slate-700 mb-1.5">Time Slot <span className="text-red-400">*</span></label>
+                        <select value={form.timeSlot} onChange={(e) => set("timeSlot", e.target.value)} required
+                          className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer">
                           <option value="">Select a slot</option>
-                          {TIME_SLOTS.map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
+                          {TIME_SLOTS.map((t) => (<option key={t} value={t}>{t}</option>))}
                         </select>
                       </div>
                     </div>
@@ -407,15 +363,12 @@ export default function BookAppointmentPage() {
                     )}
 
                     {/* Submit */}
-                    <button
-                      type="submit"
-                      disabled={loading}
+                    <button type="submit" disabled={loading}
                       className={`w-full py-4 rounded-2xl text-base font-bold transition-all flex items-center justify-center gap-2 ${
                         loading
                           ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                           : "bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md"
-                      }`}
-                    >
+                      }`}>
                       <Calendar size={18} />
                       {loading ? "Booking..." : "Confirm Appointment"}
                     </button>
