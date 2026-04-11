@@ -1,27 +1,46 @@
 import { Request, Response } from 'express';
 import Reminder from '../models/Reminder';
 
-// POST /api/reminders — Create a new reminder
+/**
+ * POST /api/reminders
+ * Creates or UPDATES a reminder for a patient+medicine (upsert — no duplicates).
+ */
 export const createReminder = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId, medicineName, dosage, times, notes, timezone } = req.body;
 
-    if (!patientId || !medicineName || !dosage || !times || !times.length) {
-      res.status(400).json({ success: false, message: 'patientId, medicineName, dosage, and times are required.' });
+    if (!patientId || !medicineName || !dosage || !Array.isArray(times) || times.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'patientId, medicineName, dosage, and times (non-empty array) are required.',
+      });
       return;
     }
 
-    const reminder = new Reminder({ patientId, medicineName, dosage, times, notes: notes || '', timezone: timezone || 'Asia/Kolkata' });
-    await reminder.save();
+    // Upsert: if a reminder for this patient+medicine already exists, update it
+    const reminder = await Reminder.findOneAndUpdate(
+      { patientId, medicineName, isActive: true },
+      {
+        dosage,
+        times,
+        notes:    notes || '',
+        timezone: timezone || 'Asia/Kolkata',
+        isActive: true,
+      },
+      { new: true, upsert: true }  // create if not found
+    );
 
-    res.status(201).json({ success: true, data: reminder });
+    res.status(200).json({ success: true, data: reminder });
   } catch (err: any) {
     console.error('[Reminder] createReminder error:', err.message);
-    res.status(500).json({ success: false, message: 'Failed to create reminder.' });
+    res.status(500).json({ success: false, message: 'Failed to save reminder.' });
   }
 };
 
-// GET /api/reminders/:patientId — Get all reminders for a patient
+/**
+ * GET /api/reminders/:patientId
+ * Returns all active reminders for a patient.
+ */
 export const getReminders = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.params;
@@ -33,7 +52,10 @@ export const getReminders = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-// DELETE /api/reminders/:id — Delete (deactivate) a reminder
+/**
+ * DELETE /api/reminders/:id
+ * Soft-deletes (deactivates) a reminder by its MongoDB _id.
+ */
 export const deleteReminder = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -42,7 +64,7 @@ export const deleteReminder = async (req: Request, res: Response): Promise<void>
       res.status(404).json({ success: false, message: 'Reminder not found.' });
       return;
     }
-    res.status(200).json({ success: true, message: 'Reminder removed.' });
+    res.status(200).json({ success: true, message: 'Reminder deactivated.' });
   } catch (err: any) {
     console.error('[Reminder] deleteReminder error:', err.message);
     res.status(500).json({ success: false, message: 'Failed to delete reminder.' });
