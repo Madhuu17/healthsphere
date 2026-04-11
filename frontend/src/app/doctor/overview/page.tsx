@@ -28,55 +28,43 @@ export default function DoctorOverview() {
         ))}
       </div>
 
-      {/* Doctor Profile Card + Today's appointments */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-          <h2 className="text-base font-black text-slate-700 uppercase tracking-wider mb-6">Professional Profile</h2>
-          <div className="flex items-start gap-6">
-            <div className="w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-700 rounded-2xl flex items-center justify-center text-white text-4xl font-black shadow-xl shadow-blue-500/30 shrink-0">
-              {doctor.name?.[0]?.toUpperCase()}
+      {/* Today's Appointments — centered */}
+      <div className="max-w-3xl mx-auto">
+        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <Calendar size={20} className="text-white"/>
             </div>
-            <div className="flex-1">
-              <h3 className="text-2xl font-black text-slate-900">{doctor.name}</h3>
-              <p className="text-blue-600 font-bold">{doctorProfile?.designation}</p>
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                {[
-                  ["Specialization", doctorProfile?.specialization],
-                  ["Qualification", doctorProfile?.qualification],
-                  ["Hospital", doctorProfile?.hospital],
-                  ["Experience", doctorProfile?.experience ? `${doctorProfile.experience} years` : "—"],
-                  ["Contact", doctorProfile?.contactNumber],
-                  ["Age", doctorProfile?.age ? `${doctorProfile.age} years` : "—"],
-                ].map(([k, v]) => (
-                  <div key={k as string} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{k}</p>
-                    <p className="font-bold text-slate-700 text-sm mt-0.5 truncate">{(v as string) || "—"}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <h2 className="text-base font-black text-slate-700 uppercase tracking-wider">
+              Today&apos;s Appointments
+            </h2>
+            {todayAppts.length > 0 && (
+              <span className="ml-auto bg-blue-100 text-blue-600 text-xs font-black px-3 py-1 rounded-full">
+                {todayAppts.length} scheduled
+              </span>
+            )}
           </div>
-        </div>
 
-        {/* Today's appointments */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-          <h2 className="text-base font-black text-slate-700 uppercase tracking-wider mb-5">Today&apos;s Appointments</h2>
           {todayAppts.length === 0 ? (
-            <div className="text-center py-8">
-              <Calendar size={36} className="mx-auto text-slate-200 mb-3"/>
-              <p className="text-slate-400 text-sm font-medium">No appointments today</p>
+            <div className="text-center py-12">
+              <Calendar size={44} className="mx-auto text-slate-200 mb-3"/>
+              <p className="text-slate-400 font-semibold">No appointments today</p>
+              <p className="text-slate-300 text-sm mt-1">Enjoy your free day!</p>
             </div>
           ) : (
             <div className="space-y-3">
               {todayAppts.map((a: any, i: number) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                  <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0">
+                <div key={i} className="flex items-center gap-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 hover:bg-blue-100/60 transition-colors">
+                  <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-md shadow-blue-600/20">
                     {a.patientName?.[0]?.toUpperCase()}
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-800 text-sm truncate">{a.patientName}</p>
-                    <p className="text-xs text-blue-500 font-semibold">{a.timeSlot}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800 truncate">{a.patientName}</p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">{a.hospital}</p>
                   </div>
+                  <span className="shrink-0 bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm">
+                    {a.timeSlot}
+                  </span>
                 </div>
               ))}
             </div>

@@ -32,6 +32,8 @@ export const generateDietPlan = async (req: Request, res: Response): Promise<voi
     const { patientId } = req.params;
     const { dietType, allergies, goal } = req.body;
 
+    console.log("Incoming request:", req.body);
+
     if (!dietType) {
       res.status(400).json({ success: false, message: 'dietType is required.' });
       return;
@@ -58,6 +60,7 @@ export const generateDietPlan = async (req: Request, res: Response): Promise<voi
     const gender = patient.gender || 'Male';
 
     // Call AI generator
+    console.log("Calling Gemini API...");
     const result = await generateDietPlanAI({
       height: patient.height,
       weight: patient.weight,
@@ -82,8 +85,8 @@ export const generateDietPlan = async (req: Request, res: Response): Promise<voi
 
     res.json({ success: true, plan: savedPlan });
   } catch (error: any) {
-    console.error('[DietPlan] Generate error:', error.message);
-    res.status(500).json({ success: false, message: 'Failed to generate diet plan. Please try again.' });
+    console.error("Diet Plan Error:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 

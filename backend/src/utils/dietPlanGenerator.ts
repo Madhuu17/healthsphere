@@ -105,6 +105,8 @@ RULES:
     contents: prompt,
   });
 
+  console.log("Gemini response:", response);
+
   const plan = (response.text ?? '').trim();
 
   return { bmi, dailyCalories, plan };
