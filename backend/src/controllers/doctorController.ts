@@ -47,10 +47,7 @@ export const updateBlockedDates = async (req: Request, res: Response): Promise<v
 export const getDoctorWeekAppointments = async (req: Request, res: Response): Promise<void> => {
   try {
     const { doctorId } = req.params;
-    // Fetch 2 weeks of appointments
-    const now = new Date();
-    const startDate = new Date(now); startDate.setDate(startDate.getDate() - startDate.getDay());
-    const endDate   = new Date(startDate); endDate.setDate(endDate.getDate() + 13);
+    const weekOffset = parseInt((req.query.weekOffset as string) || '0', 10) || 0;
 
     const toYMD = (d: Date) => {
       const y = d.getFullYear();
@@ -59,16 +56,28 @@ export const getDoctorWeekAppointments = async (req: Request, res: Response): Pr
       return `${y}-${m}-${dd}`;
     };
 
+    // Start from Sunday of the requested week
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setDate(now.getDate() - now.getDay() + weekOffset * 7);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+
     const appointments = await Appointment.find({
       doctorId,
       date: { $gte: toYMD(startDate), $lte: toYMD(endDate) }
     }).sort({ date: 1, timeSlot: 1 });
 
+    console.log(`[Schedule] doctorId=${doctorId} weekOffset=${weekOffset} window=${toYMD(startDate)}→${toYMD(endDate)} found=${appointments.length}`);
     res.json(appointments);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 // ─── Book appointment (patient books) ────────────────────────────────────────
 export const bookAppointment = async (req: Request, res: Response): Promise<void> => {

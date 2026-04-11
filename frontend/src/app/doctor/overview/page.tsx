@@ -31,13 +31,31 @@ export default function DoctorOverview() {
   const [priorityIds, setPriorityIds] = useState<Set<string>>(new Set());
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // Today's appointments — sort: priority first, then by time
+  // Today's appointments — exclude past slots, sort: priority → severity (desc) → time (asc)
   const todayAppts = useMemo(() => {
-    const list = appointments.filter((a: any) => a.date === today);
+    const nowMinutes = (() => {
+      const n = new Date();
+      return n.getHours() * 60 + n.getMinutes();
+    })();
+
+    const list = appointments.filter((a: any) => {
+      if (a.date !== today) return false;
+      if (a.status === "completed" || a.status === "cancelled") return false;
+      // Exclude slots that have already passed today
+      const slotMinutes = parseTime(a.timeSlot);
+      return slotMinutes >= nowMinutes;
+    });
+
     return list.sort((a: any, b: any) => {
+      // 1. Priority first
       const aPri = a.isPriority || priorityIds.has(a.appointmentId) ? 1 : 0;
       const bPri = b.isPriority || priorityIds.has(b.appointmentId) ? 1 : 0;
       if (bPri !== aPri) return bPri - aPri;
+      // 2. Higher severity first
+      const aSev = a.severityScore ?? 0;
+      const bSev = b.severityScore ?? 0;
+      if (bSev !== aSev) return bSev - aSev;
+      // 3. Earlier time first
       return parseTime(a.timeSlot) - parseTime(b.timeSlot);
     });
   }, [appointments, today, priorityIds]);

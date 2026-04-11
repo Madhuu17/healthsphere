@@ -234,11 +234,17 @@ export const prioritizeAppointment = async (req: Request, res: Response): Promis
       return;
     }
 
+    const doctorName   = appointment.doctorName?.trim()  || "";
+    const hospitalName = appointment.hospital?.trim()    || "";
+    const notifText = doctorName && hospitalName
+      ? `Dr. ${doctorName} at ${hospitalName} is available now. Please come immediately.`
+      : "Doctor is available now. Please come immediately.";
+
     const Notification = (await import('../models/Notification')).default;
     await Notification.create({
       patientId: appointment.patientId,
       type:      'appointment',
-      text:      'The doctor is available now. Please come immediately.',
+      text:      notifText,
       date:      new Date().toISOString().split('T')[0],
       isRead:    false,
     });

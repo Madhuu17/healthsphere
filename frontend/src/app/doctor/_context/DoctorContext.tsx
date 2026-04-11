@@ -135,11 +135,13 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
   const todayStr = toYMD(new Date());
   const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-  const fetchSchedule = useCallback(async (doctorId: string) => {
+  const fetchSchedule = useCallback(async (doctorId: string, offset = 0) => {
     try {
-      const res = await fetch(`${API}/api/doctor/schedule/${doctorId}`);
+      const res = await fetch(`${API}/api/doctor/schedule/${doctorId}?weekOffset=${offset}`);
       const data = await res.json();
-      setAppointments(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      console.log("[Schedule] fetched appointments:", list.length, "for weekOffset:", offset);
+      setAppointments(list);
     } catch {}
   }, []);
 
@@ -163,7 +165,7 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setWeekDates(getWeekDates(weekOffset));
-    if (doctor) fetchSchedule(doctor.id);
+    if (doctor) fetchSchedule(doctor.id, weekOffset);
   }, [weekOffset, doctor]);
 
   const toggleBlock = async (date: string) => {

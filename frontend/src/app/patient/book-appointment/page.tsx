@@ -142,6 +142,7 @@ export default function BookAppointmentPage() {
 
   const prefillSymptoms   = searchParams.get("symptoms") || "";
   const prefillDoctorType = searchParams.get("doctorType") || "";
+  const prefillSeverity   = Number(searchParams.get("severity") || "0") || null;
 
   const [patientId,   setPatientId]   = useState("");
   const [patientName, setPatientName] = useState("");
@@ -282,13 +283,14 @@ export default function BookAppointmentPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientId:   patientId   || "guest",
-          patientName: patientName || "Guest Patient",
-          doctorId:    selectedDoctor.doctorId,
-          doctorName:  selectedDoctor.name,
-          hospital:    selectedDoctor.hospital,
-          date:        form.date,
-          timeSlot:    form.timeSlot,
+          patientId:     patientId   || "guest",
+          patientName:   patientName || "Guest Patient",
+          doctorId:      selectedDoctor.doctorId,
+          doctorName:    selectedDoctor.name,
+          hospital:      selectedDoctor.hospital,
+          date:          form.date,
+          timeSlot:      form.timeSlot,
+          severityScore: prefillSeverity,
         }),
       });
       const data = await res.json();

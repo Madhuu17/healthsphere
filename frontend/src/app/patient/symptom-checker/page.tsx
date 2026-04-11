@@ -356,7 +356,7 @@ export default function SymptomCheckerPage() {
                   {/* CTA → Book Appointment */}
                   <div className="pt-2 border-t border-slate-100">
                     <Link
-                      href={`/patient/book-appointment?symptoms=${encodeURIComponent(symptoms)}&doctorType=${encodeURIComponent(doctorMatch.specialization)}`}
+                      href={`/patient/book-appointment?symptoms=${encodeURIComponent(symptoms)}&doctorType=${encodeURIComponent(doctorMatch.specialization)}&severity=${result?.severity ?? ""}`}
                       className="w-full py-3.5 rounded-2xl text-base font-bold bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
                     >
                       <Calendar size={18} />
