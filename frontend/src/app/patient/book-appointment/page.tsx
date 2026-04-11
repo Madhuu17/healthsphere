@@ -1,38 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity, Stethoscope, UserRound, CreditCard,
   FileText, Pill, Mail, LogOut, ArrowLeft, Calendar,
   CheckCircle2, AlertCircle, Clock, Building2, User,
+  ChevronDown, Search, X,
 } from "lucide-react";
 
 const NAV_LINKS = [
-  { label: "Profile",         href: "/patient/overview", icon: UserRound },
-  { label: "Appointments",    href: "/patient/appointments", icon: Calendar },
+  { label: "Profile",         href: "/patient/overview",        icon: UserRound },
+  { label: "Appointments",    href: "/patient/appointments",    icon: Calendar },
   { label: "Medical Records", href: "/patient/medical-records", icon: FileText },
-  { label: "Medications",     href: "/patient/medications", icon: Pill },
-  { label: "Messages",        href: "/patient/messages", icon: Mail },
-];
-
-const DOCTOR_TYPES = [
-  "General Physician",
-  "Cardiologist",
-  "Dermatologist",
-  "Pediatrician",
-  "Neurologist",
-  "Orthopedic Surgeon",
-  "Gynecologist",
-  "Psychiatrist",
-  "Ophthalmologist",
-  "ENT Specialist",
-  "Pulmonologist",
-  "Gastroenterologist",
-  "Endocrinologist",
-  "Oncologist",
-  "Urologist",
+  { label: "Medications",     href: "/patient/medications",     icon: Pill },
+  { label: "Messages",        href: "/patient/messages",        icon: Mail },
 ];
 
 const TIME_SLOTS = [
@@ -43,33 +26,137 @@ const TIME_SLOTS = [
   "05:00 PM", "05:30 PM",
 ];
 
-// Helper to format date explicitly as dd-mm-yyyy
 function formatDate(d: any) {
   if (!d) return "";
   const date = new Date(d);
   if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+}
+
+// ── Combobox component ────────────────────────────────────────────────────────
+interface ComboItem { label: string; sub?: string; value: string }
+
+function Combobox({
+  items, value, onChange, onSelect, placeholder, locked,
+}: {
+  items: ComboItem[];
+  value: string;
+  onChange: (v: string) => void;
+  onSelect: (item: ComboItem) => void;
+  placeholder?: string;
+  locked?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!value.trim()) return items;
+    const q = value.toLowerCase();
+    return items.filter(
+      i => i.label.toLowerCase().includes(q) || (i.sub || "").toLowerCase().includes(q)
+    );
+  }, [items, value]);
+
+  function highlight(text: string, query: string) {
+    if (!query.trim()) return <span>{text}</span>;
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return <span>{text}</span>;
+    return (
+      <span>
+        {text.slice(0, idx)}
+        <mark className="bg-teal-100 text-teal-800 rounded">{text.slice(idx, idx + query.length)}</mark>
+        {text.slice(idx + query.length)}
+      </span>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          readOnly={locked}
+          onChange={e => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder}
+          autoComplete="off"
+          className={`w-full px-4 py-3.5 pr-10 border rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all ${
+            locked ? "cursor-default" : ""
+          } ${open ? "border-teal-400" : "border-slate-200"}`}
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {value && !locked && (
+            <button type="button" onClick={() => { onChange(""); onSelect({ label: "", value: "", sub: "" }); }}
+              className="text-slate-300 hover:text-slate-500 transition-colors p-0.5">
+              <X size={14}/>
+            </button>
+          )}
+          <ChevronDown size={16} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}/>
+        </div>
+      </div>
+
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+          {filtered.map(item => (
+            <button
+              key={item.value}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); onSelect(item); onChange(item.label); setOpen(false); }}
+              className="w-full text-left px-4 py-3 hover:bg-teal-50 transition-colors border-b border-slate-50 last:border-0"
+            >
+              <p className="text-sm font-semibold text-slate-800">{highlight(item.label, value)}</p>
+              {item.sub && <p className="text-xs text-slate-400 mt-0.5">{highlight(item.sub, value)}</p>}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && filtered.length === 0 && value.trim() && (
+        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl px-4 py-3">
+          <p className="text-sm text-slate-400 font-medium">No matches found</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+interface DoctorRecord {
+  doctorId: string;
+  name: string;
+  specialization: string;
+  hospital: string;
 }
 
 export default function BookAppointmentPage() {
-  const router      = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
 
-  // Pre-fill from query params (passed from symptom-checker)
   const prefillSymptoms   = searchParams.get("symptoms") || "";
   const prefillDoctorType = searchParams.get("doctorType") || "";
 
   const [patientId,   setPatientId]   = useState("");
   const [patientName, setPatientName] = useState("");
 
+  // ── Doctor / hospital data from DB ──
+  const [doctors,         setDoctors]         = useState<DoctorRecord[]>([]);
+  const [selectedDoctor,  setSelectedDoctor]  = useState<DoctorRecord | null>(null);
+  const [doctorQuery,     setDoctorQuery]     = useState("");
+  const [hospitalQuery,   setHospitalQuery]   = useState("");
+  const [loadingDoctors,  setLoadingDoctors]  = useState(true);
+
+  // ── Form fields ──
   const [form, setForm] = useState({
     symptoms:   prefillSymptoms,
-    doctorType: prefillDoctorType || "General Physician",
-    doctorName: "",
-    hospital:   "",
+    doctorType: prefillDoctorType || "",
     date:       "",
     timeSlot:   "",
   });
@@ -78,6 +165,7 @@ export default function BookAppointmentPage() {
   const [success, setSuccess] = useState(false);
   const [error,   setError]   = useState("");
 
+  // ── Load patient from localStorage ──
   useEffect(() => {
     const raw = localStorage.getItem("user");
     if (raw) {
@@ -87,26 +175,106 @@ export default function BookAppointmentPage() {
     }
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("isLoggedIn");
-    router.push("/login");
-  };
+  // ── Fetch all doctors from DB ──
+  useEffect(() => {
+    fetch("http://localhost:5000/api/doctor/all")
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setDoctors(data);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingDoctors(false));
+  }, []);
+
+  // ── Derived: unique hospitals ──
+  const allHospitals = useMemo(() => {
+    const set = new Set(doctors.map(d => d.hospital).filter(Boolean));
+    return [...set].sort();
+  }, [doctors]);
+
+  // ── Filtered doctor list ──
+  // Priority: specialization (from AI) → hospital (if selected) → query
+  const filteredDoctors = useMemo<ComboItem[]>(() => {
+    let list = doctors;
+
+    // If AI-prefilled specialization, filter by it first (loose match)
+    const spec = form.doctorType.trim().toLowerCase();
+    if (spec) {
+      const specFiltered = list.filter(d =>
+        d.specialization?.toLowerCase().includes(spec) ||
+        spec.includes(d.specialization?.toLowerCase() || "xxxnomatch")
+      );
+      if (specFiltered.length > 0) list = specFiltered;
+    }
+
+    // If hospital chosen, filter by hospital
+    if (hospitalQuery && allHospitals.includes(hospitalQuery)) {
+      list = list.filter(d => d.hospital === hospitalQuery);
+    }
+
+    return list.map(d => ({
+      value: d.doctorId,
+      label: d.name,
+      sub:   `${d.specialization} · ${d.hospital}`,
+    }));
+  }, [doctors, form.doctorType, hospitalQuery, allHospitals]);
+
+  // ── Hospital combobox items ──
+  const hospitalItems = useMemo<ComboItem[]>(() => {
+    // If a doctor is selected, lock to that doctor's hospital
+    if (selectedDoctor) {
+      return [{ value: selectedDoctor.hospital, label: selectedDoctor.hospital }];
+    }
+    return allHospitals.map(h => ({ value: h, label: h }));
+  }, [allHospitals, selectedDoctor]);
+
+  // ── When doctor selected → auto-fill hospital ──
+  function onDoctorSelect(item: ComboItem) {
+    const doc = doctors.find(d => d.doctorId === item.value) || null;
+    setSelectedDoctor(doc);
+    if (doc) {
+      setHospitalQuery(doc.hospital);
+      setForm(prev => ({ ...prev, doctorType: prev.doctorType || doc.specialization }));
+    }
+    if (!item.value) {
+      setSelectedDoctor(null);
+    }
+  }
+
+  // ── When hospital selected → clear doctor if mismatch ──
+  function onHospitalSelect(item: ComboItem) {
+    setHospitalQuery(item.label);
+    if (selectedDoctor && selectedDoctor.hospital !== item.label) {
+      setSelectedDoctor(null);
+      setDoctorQuery("");
+    }
+  }
 
   const set = (field: string, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm(prev => ({ ...prev, [field]: value }));
 
-  // Today for min date
   const today = new Date().toISOString().split("T")[0];
 
+  // ── Submit ──
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!form.doctorName.trim()) { setError("Please enter the doctor's name."); return; }
-    if (!form.hospital.trim())   { setError("Please enter the hospital/clinic name."); return; }
-    if (!form.date)              { setError("Please select an appointment date."); return; }
-    if (!form.timeSlot)          { setError("Please select a time slot."); return; }
+    // Validate doctor from DB
+    if (!selectedDoctor) {
+      setError("Please select a valid doctor from the dropdown list.");
+      return;
+    }
+    if (!hospitalQuery || !allHospitals.includes(hospitalQuery)) {
+      setError("Please select a valid hospital from the dropdown list.");
+      return;
+    }
+    if (selectedDoctor.hospital !== hospitalQuery) {
+      setError("The selected doctor does not belong to the selected hospital.");
+      return;
+    }
+    if (!form.date)     { setError("Please select an appointment date."); return; }
+    if (!form.timeSlot) { setError("Please select a time slot."); return; }
 
     setLoading(true);
     try {
@@ -116,9 +284,9 @@ export default function BookAppointmentPage() {
         body: JSON.stringify({
           patientId:   patientId   || "guest",
           patientName: patientName || "Guest Patient",
-          doctorId:    `DOC-${form.doctorType.replace(/\s+/g, "-").toUpperCase()}`,
-          doctorName:  form.doctorName,
-          hospital:    form.hospital,
+          doctorId:    selectedDoctor.doctorId,
+          doctorName:  selectedDoctor.name,
+          hospital:    selectedDoctor.hospital,
           date:        form.date,
           timeSlot:    form.timeSlot,
         }),
@@ -133,6 +301,21 @@ export default function BookAppointmentPage() {
       setLoading(false);
     }
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("isLoggedIn");
+    router.push("/login");
+  };
+
+  function resetForm() {
+    setSuccess(false);
+    setForm({ symptoms: "", doctorType: "", date: "", timeSlot: "" });
+    setSelectedDoctor(null);
+    setDoctorQuery("");
+    setHospitalQuery("");
+    setError("");
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -178,10 +361,8 @@ export default function BookAppointmentPage() {
                 <p className="text-[10px] font-bold text-teal-600 uppercase tracking-tighter mt-0.5">Patient Account</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center justify-center gap-2 py-2 bg-white rounded-xl border border-slate-200 text-slate-500 hover:border-red-200 hover:text-red-600 transition-all text-sm font-semibold"
-            >
+            <button onClick={handleLogout}
+              className="flex items-center justify-center gap-2 py-2 bg-white rounded-xl border border-slate-200 text-slate-500 hover:border-red-200 hover:text-red-600 transition-all text-sm font-semibold">
               <LogOut size={14} />
               Logout
             </button>
@@ -217,34 +398,31 @@ export default function BookAppointmentPage() {
                   <div>
                     <h2 className="text-2xl font-black text-slate-800">Appointment Booked!</h2>
                     <p className="text-slate-500 mt-2 font-medium">
-                      Your appointment with <span className="text-teal-600 font-bold">{form.doctorName}</span> at{" "}
-                      <span className="text-teal-600 font-bold">{form.hospital}</span> has been confirmed.
+                      Your appointment with <span className="text-teal-600 font-bold">{selectedDoctor?.name}</span> at{" "}
+                      <span className="text-teal-600 font-bold">{selectedDoctor?.hospital}</span> has been confirmed.
                     </p>
                   </div>
 
-                  {/* Summary */}
                   <div className="w-full bg-slate-50 rounded-2xl p-6 border border-slate-100 text-left space-y-3 mt-2">
                     <div className="flex items-center gap-3 text-sm">
                       <User size={16} className="text-teal-500 shrink-0" />
                       <span className="text-slate-500 font-semibold w-28">Specialist</span>
-                      <span className="text-slate-800 font-bold">{form.doctorType}</span>
+                      <span className="text-slate-800 font-bold">{selectedDoctor?.specialization}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <Stethoscope size={16} className="text-teal-500 shrink-0" />
                       <span className="text-slate-500 font-semibold w-28">Doctor</span>
-                      <span className="text-slate-800 font-bold">{form.doctorName}</span>
+                      <span className="text-slate-800 font-bold">{selectedDoctor?.name}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <Building2 size={16} className="text-teal-500 shrink-0" />
                       <span className="text-slate-500 font-semibold w-28">Hospital</span>
-                      <span className="text-slate-800 font-bold">{form.hospital}</span>
+                      <span className="text-slate-800 font-bold">{selectedDoctor?.hospital}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <Calendar size={16} className="text-teal-500 shrink-0" />
                       <span className="text-slate-500 font-semibold w-28">Date</span>
-                      <span className="text-slate-800 font-bold">
-                        {formatDate(form.date)}
-                      </span>
+                      <span className="text-slate-800 font-bold">{formatDate(form.date)}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <Clock size={16} className="text-teal-500 shrink-0" />
@@ -254,16 +432,12 @@ export default function BookAppointmentPage() {
                   </div>
 
                   <div className="flex gap-3 w-full mt-2">
-                    <button
-                      onClick={() => { setSuccess(false); setForm({ symptoms: "", doctorType: "General Physician", doctorName: "", hospital: "", date: "", timeSlot: "" }); }}
-                      className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all text-sm"
-                    >
+                    <button onClick={resetForm}
+                      className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all text-sm">
                       Book Another
                     </button>
-                    <Link
-                      href="/patient/overview"
-                      className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-bold hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm text-sm flex items-center justify-center"
-                    >
+                    <Link href="/patient/overview"
+                      className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-bold hover:from-teal-600 hover:to-emerald-600 transition-all shadow-sm text-sm flex items-center justify-center">
                       Go to Dashboard
                     </Link>
                   </div>
@@ -290,7 +464,7 @@ export default function BookAppointmentPage() {
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
                         Patient Name <span className="text-red-400">*</span>
                       </label>
-                      <input type="text" value={patientName} onChange={(e) => setPatientName(e.target.value)}
+                      <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)}
                         placeholder="Your full name" required
                         className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all" />
                     </div>
@@ -298,58 +472,76 @@ export default function BookAppointmentPage() {
                     {/* Symptoms */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">Symptoms</label>
-                      <textarea value={form.symptoms} onChange={(e) => set("symptoms", e.target.value)}
+                      <textarea value={form.symptoms} onChange={e => set("symptoms", e.target.value)}
                         placeholder="Briefly describe your symptoms (optional)" rows={3}
                         className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all resize-none" />
                     </div>
 
-                    {/* Doctor Type */}
+                    {/* Doctor Combobox */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                        Specialist Type <span className="text-red-400">*</span>
+                        Doctor <span className="text-red-400">*</span>
                       </label>
-                      <select value={form.doctorType} onChange={(e) => set("doctorType", e.target.value)} required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer">
-                        {DOCTOR_TYPES.map((t) => (<option key={t} value={t}>{t}</option>))}
-                      </select>
+
+                      {loadingDoctors ? (
+                        <div className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl bg-slate-50 text-sm text-slate-400 font-medium flex items-center gap-2">
+                          <div className="w-3.5 h-3.5 border-2 border-teal-400 border-t-transparent rounded-full animate-spin"/>
+                          Loading doctors…
+                        </div>
+                      ) : (
+                        <Combobox
+                          items={filteredDoctors}
+                          value={doctorQuery}
+                          onChange={v => { setDoctorQuery(v); if (!v) { setSelectedDoctor(null); setHospitalQuery(""); } }}
+                          onSelect={onDoctorSelect}
+                          placeholder="Search by name or specialization…"
+                        />
+                      )}
+
                       {prefillDoctorType && (
-                        <p className="text-xs text-teal-600 font-semibold mt-1.5 flex items-center gap-1">✨ Pre-filled from AI symptom analysis</p>
+                        <p className="text-xs text-teal-600 font-semibold mt-1.5 flex items-center gap-1">
+                          ✨ Filtered by AI recommendation: <span className="font-black">{prefillDoctorType}</span>
+                        </p>
+                      )}
+                      {selectedDoctor && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-teal-700 font-semibold bg-teal-50 border border-teal-100 rounded-xl px-3 py-2">
+                          <CheckCircle2 size={13} className="text-teal-500 shrink-0"/>
+                          {selectedDoctor.name} — {selectedDoctor.specialization}
+                        </div>
                       )}
                     </div>
 
-                    {/* Doctor Name */}
-                    <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                        Doctor Name <span className="text-red-400">*</span>
-                      </label>
-                      <input type="text" value={form.doctorName} onChange={(e) => set("doctorName", e.target.value)}
-                        placeholder="e.g. Dr. Aditi Verma" required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all" />
-                    </div>
-
-                    {/* Hospital */}
+                    {/* Hospital Combobox */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-1.5">
                         Hospital / Clinic <span className="text-red-400">*</span>
                       </label>
-                      <input type="text" value={form.hospital} onChange={(e) => set("hospital", e.target.value)}
-                        placeholder="e.g. Lilavati Hospital, Mumbai" required
-                        className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all" />
+                      <Combobox
+                        items={hospitalItems}
+                        value={hospitalQuery}
+                        onChange={v => { setHospitalQuery(v); if (!v && selectedDoctor) { setSelectedDoctor(null); setDoctorQuery(""); } }}
+                        onSelect={onHospitalSelect}
+                        placeholder="Search hospital…"
+                        locked={!!selectedDoctor}
+                      />
+                      {selectedDoctor && (
+                        <p className="text-xs text-slate-400 font-medium mt-1.5">Auto-filled from selected doctor</p>
+                      )}
                     </div>
 
-                    {/* Date + Time row */}
+                    {/* Date + Time */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1.5">Date <span className="text-red-400">*</span></label>
-                        <input type="date" min={today} value={form.date} onChange={(e) => set("date", e.target.value)} required
+                        <input type="date" min={today} value={form.date} onChange={e => set("date", e.target.value)} required
                           className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all cursor-pointer" />
                       </div>
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1.5">Time Slot <span className="text-red-400">*</span></label>
-                        <select value={form.timeSlot} onChange={(e) => set("timeSlot", e.target.value)} required
+                        <select value={form.timeSlot} onChange={e => set("timeSlot", e.target.value)} required
                           className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer">
                           <option value="">Select a slot</option>
-                          {TIME_SLOTS.map((t) => (<option key={t} value={t}>{t}</option>))}
+                          {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                     </div>
@@ -363,9 +555,9 @@ export default function BookAppointmentPage() {
                     )}
 
                     {/* Submit */}
-                    <button type="submit" disabled={loading}
+                    <button type="submit" disabled={loading || !selectedDoctor}
                       className={`w-full py-4 rounded-2xl text-base font-bold transition-all flex items-center justify-center gap-2 ${
-                        loading
+                        loading || !selectedDoctor
                           ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                           : "bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md"
                       }`}>
@@ -383,7 +575,7 @@ export default function BookAppointmentPage() {
                   <div>
                     <p className="text-sm font-bold text-teal-800">Appointment Confirmation</p>
                     <p className="text-xs text-teal-600 font-medium mt-0.5 leading-relaxed">
-                      You will receive a confirmation once your appointment is booked. Please arrive 15 minutes before your scheduled time.
+                      Only doctors registered in our system are available for selection. Please arrive 15 minutes before your scheduled time.
                     </p>
                   </div>
                 </div>
