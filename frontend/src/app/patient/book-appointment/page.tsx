@@ -9,6 +9,7 @@ import {
   CheckCircle2, AlertCircle, Clock, Building2, User,
   ChevronDown, Search, X,
 } from "lucide-react";
+import { getAvailableTimeSlots } from "@/utils/timeSlots";
 
 const NAV_LINKS = [
   { label: "Profile",         href: "/patient/overview",        icon: UserRound },
@@ -18,13 +19,6 @@ const NAV_LINKS = [
   { label: "Messages",        href: "/patient/messages",        icon: Mail },
 ];
 
-const TIME_SLOTS = [
-  "08:00 AM", "08:30 AM", "09:00 AM", "09:30 AM",
-  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-  "12:00 PM", "12:30 PM", "02:00 PM", "02:30 PM",
-  "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM",
-  "05:00 PM", "05:30 PM",
-];
 
 function formatDate(d: any) {
   if (!d) return "";
@@ -535,16 +529,22 @@ export default function BookAppointmentPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1.5">Date <span className="text-red-400">*</span></label>
-                        <input type="date" min={today} value={form.date} onChange={e => set("date", e.target.value)} required
+                        <input type="date" min={today} value={form.date}
+                          onChange={e => { set("date", e.target.value); set("timeSlot", ""); }} required
                           className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all cursor-pointer" />
                       </div>
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1.5">Time Slot <span className="text-red-400">*</span></label>
-                        <select value={form.timeSlot} onChange={e => set("timeSlot", e.target.value)} required
-                          className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer">
-                          <option value="">Select a slot</option>
-                          {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                        {(() => {
+                          const slots = getAvailableTimeSlots(form.date);
+                          return (
+                            <select value={form.timeSlot} onChange={e => set("timeSlot", e.target.value)} required
+                              className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-semibold text-slate-700 bg-slate-50 transition-all appearance-none cursor-pointer">
+                              <option value="">{form.date ? (slots.length ? "Select a slot" : "No slots available today") : "Pick a date first"}</option>
+                              {slots.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          );
+                        })()}
                       </div>
                     </div>
 

@@ -264,6 +264,7 @@ export default function PatientTimeline() {
   }, [patientId]);
 
   // Fallback: merge from context if backend returns empty
+  const todayYMD = new Date().toISOString().split("T")[0];
   const contextEntries = [
     ...timeline.map((t: any) => ({
       _id:        t._id,
@@ -278,6 +279,11 @@ export default function PatientTimeline() {
       recordType: t.recordType || "report",
     })),
     ...pastAppointments
+      // exclude future scheduled; only completed/cancelled or past-date
+      .filter((a: any) => {
+        if (a.status === "completed" || a.status === "cancelled") return true;
+        return a.date < todayYMD;
+      })
       .filter((a: any) => !timeline.some((t: any) => t.title?.includes(a.appointmentId)))
       .map((a: any) => ({
         _id:        a._id,

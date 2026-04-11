@@ -193,19 +193,47 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const [editProfilePicture, setEditProfilePicture] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
-  // ── Computed ──
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // ── Helper: parse "09:00 AM" → minutes since midnight ──
+  function slotToMinutes(slot: string): number {
+    const m = (slot || "").match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!m) return 0;
+    let h = parseInt(m[1]);
+    const min = parseInt(m[2]);
+    if (m[3].toUpperCase() === "PM" && h !== 12) h += 12;
+    if (m[3].toUpperCase() === "AM" && h === 12) h = 0;
+    return h * 60 + min;
+  }
 
+  const nowMs    = Date.now();
+  const todayYMD = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+  const today    = new Date(); today.setHours(0, 0, 0, 0); // kept for context consumers
+
+  // Upcoming = status=scheduled AND (date in future OR (date=today AND timeSlot hasn't passed yet))
   const upcomingAppointments = appointments.filter((a: any) => {
-    const d = new Date(a.date);
-    return !isNaN(d.getTime()) && d >= today && a.status !== 'completed' && a.status !== 'cancelled';
+    if (a.status === "completed" || a.status === "cancelled") return false;
+    const apptDate = a.date; // "YYYY-MM-DD"
+    if (!apptDate) return false;
+    if (apptDate > todayYMD) return true;  // future date
+    if (apptDate < todayYMD) return false; // past date
+    // Same day — check time
+    const nowMinutes  = new Date().getHours() * 60 + new Date().getMinutes();
+    const slotMinutes = slotToMinutes(a.timeSlot);
+    return slotMinutes > nowMinutes; // only show if slot hasn't passed yet
   });
 
+  // Past = completed/cancelled OR date+time already elapsed
   const pastAppointments = appointments.filter((a: any) => {
-    const d = new Date(a.date);
-    return !isNaN(d.getTime()) && (d < today || a.status === 'completed');
+    if (a.status === "completed" || a.status === "cancelled") return true;
+    const apptDate = a.date;
+    if (!apptDate) return false;
+    if (apptDate < todayYMD) return true;  // past date
+    if (apptDate > todayYMD) return false; // future date
+    // Same day — slot has passed
+    const nowMinutes  = new Date().getHours() * 60 + new Date().getMinutes();
+    const slotMinutes = slotToMinutes(a.timeSlot);
+    return slotMinutes <= nowMinutes;
   });
+
 
   // ── AI Summarize handler ──
   const handleSummarize = async (recordId: string) => {

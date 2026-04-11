@@ -115,8 +115,40 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
       res.json({ blocked: true, slots: [] }); return;
     }
 
-    const allSlots = ['09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM',
-                      '12:00 PM','02:00 PM','02:30 PM','03:00 PM','03:30 PM','04:00 PM'];
+    // ── Generate 9:00 AM → 9:00 PM in 30-min increments ──────────────────
+    function formatSlot(d: Date): string {
+      let h = d.getHours();
+      const m = d.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+
+    const todayYMD = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+    const isToday  = date === todayYMD;
+
+    // If today, cut off past slots (round up to next 30-min boundary)
+    let cutoffMinutes = 0;
+    if (isToday) {
+      const now = new Date();
+      const rem = now.getMinutes() % 30;
+      const roundedMin = rem === 0 ? now.getMinutes() : now.getMinutes() + (30 - rem);
+      cutoffMinutes = now.getHours() * 60 + roundedMin;
+    }
+
+    const allSlots: string[] = [];
+    const start = new Date(); start.setHours(9, 0, 0, 0);
+    const end   = new Date(); end.setHours(21, 0, 0, 0);
+    const cur   = new Date(start);
+    while (cur <= end) {
+      const totalMin = cur.getHours() * 60 + cur.getMinutes();
+      if (!isToday || totalMin >= cutoffMinutes) {
+        allSlots.push(formatSlot(cur));
+      }
+      cur.setMinutes(cur.getMinutes() + 30);
+    }
+
+    // Exclude already-booked slots
     const booked = await Appointment.find({ doctorId, date, status: 'scheduled' }).select('timeSlot');
     const bookedSlots = booked.map(a => a.timeSlot);
     const available = allSlots.filter(s => !bookedSlots.includes(s));
@@ -126,6 +158,7 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 // ─── OTP request for patient record access ────────────────────────────────────
 export const requestPatientAccess = async (req: Request, res: Response): Promise<void> => {

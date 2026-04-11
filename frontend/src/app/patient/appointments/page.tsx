@@ -26,34 +26,18 @@ function StatusBadge({ status }: { status: string }) {
 // ── Single appointment card ────────────────────────────────────────────────
 function AppointmentCard({ appt, formatDate }: { appt: any; formatDate: (d: any) => string }) {
   const [open, setOpen] = useState(false);
-  const isPast = appt.status === "completed" || appt.status === "cancelled";
 
   return (
-    <div className={`bg-white rounded-2xl border shadow-sm transition-all overflow-hidden ${
-      isPast ? "border-slate-100 opacity-80 hover:opacity-100" : "border-teal-100 hover:shadow-md hover:border-teal-200"
-    }`}>
+    <div className="bg-white rounded-2xl border border-teal-100 shadow-sm hover:shadow-md hover:border-teal-200 transition-all overflow-hidden">
       {/* Header strip */}
-      <div className={`h-1 w-full ${
-        appt.status === "completed" ? "bg-gradient-to-r from-green-400 to-emerald-500"
-        : appt.status === "cancelled" ? "bg-gradient-to-r from-red-300 to-rose-400"
-        : "bg-gradient-to-r from-teal-400 to-emerald-500"
-      }`} />
+      <div className="h-1 w-full bg-gradient-to-r from-teal-400 to-emerald-500"/>
 
       <div className="p-5">
         {/* Row 1: icon + doctor + status */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-              appt.status === "completed" ? "bg-green-100" :
-              appt.status === "cancelled" ? "bg-red-50" : "bg-teal-50"
-            }`}>
-              {appt.status === "completed" ? (
-                <CheckCircle2 size={18} className="text-green-500" />
-              ) : appt.status === "cancelled" ? (
-                <XCircle size={18} className="text-red-400" />
-              ) : (
-                <Stethoscope size={18} className="text-teal-600" />
-              )}
+            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center shrink-0">
+              <Stethoscope size={18} className="text-teal-600" />
             </div>
             <div>
               <h4 className="font-bold text-slate-800 text-sm leading-tight">{appt.doctorName}</h4>
@@ -64,7 +48,7 @@ function AppointmentCard({ appt, formatDate }: { appt: any; formatDate: (d: any)
         </div>
 
         {/* Row 2: Date + Time */}
-        <div className="flex gap-4 text-xs text-slate-600 mb-4">
+        <div className="flex gap-4 text-xs text-slate-600">
           <div className="flex items-center gap-1.5">
             <CalendarIcon size={12} className="text-slate-400" />
             <span className="font-semibold">{formatDate(appt.date)}</span>
@@ -74,63 +58,6 @@ function AppointmentCard({ appt, formatDate }: { appt: any; formatDate: (d: any)
             <span className="font-semibold">{appt.timeSlot}</span>
           </div>
         </div>
-
-        {/* Expandable: show for past (completed) appointments */}
-        {appt.status === "completed" && (
-          <>
-            <button
-              onClick={() => setOpen(!open)}
-              className="w-full flex items-center justify-between text-xs text-slate-500 font-bold border-t border-slate-100 pt-3 hover:text-teal-600 transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <FileText size={13} />
-                {open ? "Hide Details" : "View Diagnosis & Report"}
-              </span>
-              {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-
-            <AnimatePresence>
-              {open && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.22 }}
-                  className="overflow-hidden"
-                >
-                  <div className="pt-3 space-y-2.5">
-                    {/* Diagnosis */}
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Diagnosis</p>
-                      <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                        {appt.diagnosis || "No diagnosis recorded yet."}
-                      </p>
-                    </div>
-
-                    {/* Report */}
-                    {appt.reportUrl ? (
-                      <div className="bg-teal-50 border border-teal-100 rounded-xl p-3">
-                        <p className="text-[10px] font-black text-teal-500 uppercase tracking-widest mb-2">Report</p>
-                        <a
-                          href={appt.reportUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 text-xs font-bold text-teal-700 bg-white border border-teal-200 px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors"
-                        >
-                          <FileText size={13} /> View Report / File
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
-                        <AlertCircle size={11} /> No report attached
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
       </div>
     </div>
   );
@@ -140,19 +67,8 @@ function AppointmentCard({ appt, formatDate }: { appt: any; formatDate: (d: any)
 // Page
 // ══════════════════════════════════════════════════════════════════════════
 export default function PatientAppointments() {
-  const { upcomingAppointments, pastAppointments, appointmentsLoading, openAppt, formatDate } = usePatient();
+  const { upcomingAppointments, appointmentsLoading, openAppt, formatDate } = usePatient();
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
-  // Client-side sort toggle (backend already sorts ASC; this lets user flip)
-  function applySort(list: any[]) {
-    return [...list].sort((a, b) => {
-      const dateComp = a.date.localeCompare(b.date);
-      if (dateComp !== 0) return sortOrder === "asc" ? dateComp : -dateComp;
-      const parsedA = parseTimeSlot(a.timeSlot);
-      const parsedB = parseTimeSlot(b.timeSlot);
-      return sortOrder === "asc" ? parsedA - parsedB : parsedB - parsedA;
-    });
-  }
 
   function parseTimeSlot(slot: string): number {
     const m = (slot || "").match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -163,8 +79,16 @@ export default function PatientAppointments() {
     return h * 60 + min;
   }
 
+  function applySort(list: any[]) {
+    return [...list].sort((a, b) => {
+      const dateComp = a.date.localeCompare(b.date);
+      if (dateComp !== 0) return sortOrder === "asc" ? dateComp : -dateComp;
+      const pa = parseTimeSlot(a.timeSlot), pb = parseTimeSlot(b.timeSlot);
+      return sortOrder === "asc" ? pa - pb : pb - pa;
+    });
+  }
+
   const sortedUpcoming = applySort(upcomingAppointments);
-  const sortedPast     = applySort(pastAppointments).reverse(); // past: newest first by default
 
   if (appointmentsLoading) {
     return (
@@ -187,20 +111,15 @@ export default function PatientAppointments() {
           <CalendarIcon size={32} className="text-white" />
         </div>
         <div className="flex-1 relative z-10">
-          <h2 className="text-2xl font-black text-white">Appointments</h2>
+          <h2 className="text-2xl font-black text-white">Upcoming Appointments</h2>
           <p className="text-teal-100 text-sm mt-1">
-            All appointments sorted chronologically. Click completed ones to view diagnosis & reports.
+            Only scheduled future visits are shown here. Completed appointments appear in your{" "}
+            <span className="font-bold underline">Timeline</span>.
           </p>
         </div>
-        <div className="flex gap-3 shrink-0">
-          <div className="bg-white/20 backdrop-blur-sm rounded-2xl px-5 py-3 text-center border border-white/20">
-            <p className="text-white text-2xl font-black">{upcomingAppointments.length}</p>
-            <p className="text-teal-100 text-[10px] font-bold uppercase tracking-wider">Upcoming</p>
-          </div>
-          <div className="bg-white/20 backdrop-blur-sm rounded-2xl px-5 py-3 text-center border border-white/20">
-            <p className="text-white text-2xl font-black">{pastAppointments.length}</p>
-            <p className="text-teal-100 text-[10px] font-bold uppercase tracking-wider">Past</p>
-          </div>
+        <div className="bg-white/20 backdrop-blur-sm rounded-2xl px-5 py-3 text-center border border-white/20 shrink-0">
+          <p className="text-white text-2xl font-black">{upcomingAppointments.length}</p>
+          <p className="text-teal-100 text-[10px] font-bold uppercase tracking-wider">Scheduled</p>
         </div>
       </div>
 
@@ -209,7 +128,9 @@ export default function PatientAppointments() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-bold text-slate-800">Upcoming Appointments</h3>
-            <p className="text-slate-400 text-xs mt-0.5">Sorted {sortOrder === "asc" ? "earliest → latest" : "latest → earliest"}</p>
+            <p className="text-slate-400 text-xs mt-0.5">
+              Sorted {sortOrder === "asc" ? "earliest → latest" : "latest → earliest"}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -245,21 +166,6 @@ export default function PatientAppointments() {
           </div>
         )}
       </section>
-
-      {/* ── Past Appointments ── */}
-      {sortedPast.length > 0 && (
-        <section>
-          <h3 className="text-xl font-bold text-slate-800 mb-5">
-            Past Appointments
-            <span className="ml-2 text-sm font-semibold text-slate-400">(click to see diagnosis)</span>
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {sortedPast.map((a: any, i: number) => (
-              <AppointmentCard key={a.appointmentId || a._id || i} appt={a} formatDate={formatDate} />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

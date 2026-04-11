@@ -84,16 +84,24 @@ export const getPatientAppointments = async (req: Request, res: Response): Promi
 };
 
 // ── GET /api/appointments/patient/:patientId/timeline ─────────────────────
-// Returns a merged, chronologically sorted view of:
-//   - Appointments (all statuses)
+// Returns a merged, chronologically sorted view of PAST events only:
+//   - Appointments (completed, cancelled, or past-dated scheduled)
 //   - Medical Records (lab reports, scans, vaccinations, etc.)
 //   - Prescriptions (each prescription as a single entry)
 export const getPatientTimeline = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.params;
+    const todayYMD = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
 
     const [appts, records, prescriptions] = await Promise.all([
-      Appointment.find({ patientId }).sort({ date: -1 }).lean(),
+      // Only completed/cancelled, OR past-date scheduled ones
+      Appointment.find({
+        patientId,
+        $or: [
+          { status: { $in: ['completed', 'cancelled'] } },
+          { status: 'scheduled', date: { $lt: todayYMD } },
+        ],
+      }).sort({ date: -1 }).lean(),
       MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
       Prescription.find({ patientId }).sort({ prescribedDate: -1 }).lean(),
     ]);
