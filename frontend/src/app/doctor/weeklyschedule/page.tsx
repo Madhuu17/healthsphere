@@ -1,15 +1,59 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, X, Lock, Unlock, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, X, Lock, Unlock, AlertCircle, Brain, Loader2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDoctor } from "../_context/DoctorContext";
+
+interface PatientSummaryData {
+  patientName: string;
+  summary: string;
+  symptoms: string[];
+  interactionCount: number;
+  generatedAt: string;
+}
 
 export default function DoctorWeeklySchedule() {
   const {
     weekOffset, setWeekOffset, weekDates, blockedDates, leaveMode, setLeaveMode,
     toggleBlock, getSlotsForDay, isExpiredSlot, activeSlot, setActiveSlot,
-    today, dayNames, SLOT_TIMES, toYMD,
+    today, dayNames, SLOT_TIMES, toYMD, API,
   } = useDoctor();
+
+  // AI Summary state
+  const [summaryData, setSummaryData] = useState<PatientSummaryData | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryPatientId, setSummaryPatientId] = useState<string | null>(null);
+
+  const fetchPatientSummary = async (patientId: string) => {
+    if (summaryPatientId === patientId && summaryData) return; // already loaded
+    setSummaryLoading(true);
+    setSummaryError("");
+    setSummaryData(null);
+    setSummaryPatientId(patientId);
+    try {
+      const res = await fetch(`${API}/api/doctor/patient-summary/${patientId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to load summary");
+      setSummaryData(data.data);
+    } catch (err: any) {
+      setSummaryError(err.message || "Error loading summary");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleSlotClick = (appt: any) => {
+    if (activeSlot === appt._id) {
+      setActiveSlot(null);
+      setSummaryData(null);
+      setSummaryPatientId(null);
+    } else {
+      setActiveSlot(appt._id);
+      fetchPatientSummary(appt.patientId);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -92,7 +136,7 @@ export default function DoctorWeeklySchedule() {
                       </div>
                     ) : appts.map((appt: any) => (
                       <div key={appt._id} className="relative">
-                        <button onClick={() => setActiveSlot(activeSlot === appt._id ? null : appt._id)}
+                        <button onClick={() => handleSlotClick(appt)}
                           className={`w-full text-left px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all leading-tight ${
                             expired ? "bg-slate-100 text-slate-300 line-through" : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                           }`}>
@@ -102,16 +146,71 @@ export default function DoctorWeeklySchedule() {
                         <AnimatePresence>
                           {activeSlot === appt._id && (
                             <motion.div initial={{ opacity:0, y:-6, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, scale:0.95 }}
-                              className="absolute top-full left-0 z-30 bg-white border border-blue-200 rounded-xl shadow-2xl p-3 min-w-[170px] mt-1">
-                              <p className="text-[10px] text-blue-500 font-black uppercase mb-1">Patient Info</p>
-                              <p className="font-bold text-slate-800 text-sm">{appt.patientName}</p>
-                              <p className="text-xs text-slate-500 font-mono mt-0.5">{appt.patientId}</p>
-                              <div className="border-t border-slate-100 mt-2 pt-2 space-y-1">
-                                <p className="text-[10px] text-slate-400">{slot} · {String(date.getDate()).padStart(2,"0")}-{String(date.getMonth()+1).padStart(2,"0")}-{date.getFullYear()}</p>
-                                <p className="text-[10px] text-slate-400">{appt.hospital}</p>
-                                <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full ${expired ? "bg-slate-100 text-slate-400" : "bg-teal-50 text-teal-600"}`}>
-                                  {expired ? "Completed" : "Scheduled"}
-                                </span>
+                              className="absolute top-full left-0 z-30 bg-white border border-blue-200 rounded-2xl shadow-2xl min-w-[320px] mt-1 overflow-hidden">
+
+                              {/* Patient Info Header */}
+                              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border-b border-blue-100">
+                                <p className="text-[10px] text-blue-500 font-black uppercase mb-1">Patient Info</p>
+                                <p className="font-bold text-slate-800 text-sm">{appt.patientName}</p>
+                                <p className="text-xs text-slate-500 font-mono mt-0.5">{appt.patientId}</p>
+                                <div className="mt-2 space-y-1">
+                                  <p className="text-[10px] text-slate-400">{slot} · {String(date.getDate()).padStart(2,"0")}-{String(date.getMonth()+1).padStart(2,"0")}-{date.getFullYear()}</p>
+                                  <p className="text-[10px] text-slate-400">{appt.hospital}</p>
+                                  <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full ${expired ? "bg-slate-100 text-slate-400" : "bg-teal-50 text-teal-600"}`}>
+                                    {expired ? "Completed" : "Scheduled"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* AI Symptom Summary */}
+                              <div className="p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                    <Brain size={12} className="text-white" />
+                                  </div>
+                                  <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest">AI-Generated Summary</p>
+                                  <Sparkles size={10} className="text-amber-400" />
+                                </div>
+
+                                {summaryLoading ? (
+                                  <div className="flex items-center gap-2 py-4 justify-center text-violet-500">
+                                    <Loader2 size={14} className="animate-spin" />
+                                    <span className="text-xs font-semibold">Analyzing patient history...</span>
+                                  </div>
+                                ) : summaryError ? (
+                                  <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                                    <p className="text-xs text-red-600 font-medium">{summaryError}</p>
+                                  </div>
+                                ) : summaryData ? (
+                                  <div className="space-y-3">
+                                    <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-3 border border-violet-100/50">
+                                      <p className="text-xs text-slate-700 leading-relaxed font-medium">{summaryData.summary}</p>
+                                    </div>
+
+                                    {/* Symptom tags */}
+                                    {summaryData.symptoms.length > 0 && (
+                                      <div>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Detected Symptoms</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {summaryData.symptoms.slice(0, 8).map((s, i) => (
+                                            <span key={i} className="px-2 py-0.5 bg-white border border-violet-200/60 rounded-lg text-[9px] font-bold text-violet-700 capitalize">
+                                              {s}
+                                            </span>
+                                          ))}
+                                          {summaryData.symptoms.length > 8 && (
+                                            <span className="px-2 py-0.5 bg-violet-100 rounded-lg text-[9px] font-bold text-violet-600">
+                                              +{summaryData.symptoms.length - 8}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <p className="text-[9px] text-slate-400 font-medium">
+                                      Based on {summaryData.interactionCount} interaction{summaryData.interactionCount !== 1 ? 's' : ''}
+                                    </p>
+                                  </div>
+                                ) : null}
                               </div>
                             </motion.div>
                           )}

@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import Patient from '../models/Patient';
 import DietPlan from '../models/DietPlan';
 import { generateDietPlanAI } from '../utils/dietPlanGenerator';
+import { storeDietPlan } from '../utils/memoryService';
+import { buildEnrichedPrompt, logInteraction, getRecentSymptoms } from '../services/insightEngine';
 
 // ── Helper: calculate age from DOB ─────────────────────────────────────────
 function calcAge(dob: string): number {
@@ -30,7 +32,7 @@ export const getDietPlan = async (req: Request, res: Response): Promise<void> =>
 export const generateDietPlan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.params;
-    const { dietType, allergies, goal } = req.body;
+    const { dietType, allergies, goal, useSymptoms } = req.body;
 
     console.log("Incoming request:", req.body);
 
@@ -59,8 +61,17 @@ export const generateDietPlan = async (req: Request, res: Response): Promise<voi
     const age = calcAge(patient.dob || '');
     const gender = patient.gender || 'Male';
 
+    // ── Fetch enriched intelligence context BEFORE AI call ──
+    const patientHistory = await buildEnrichedPrompt(patientId as string, `diet plan ${dietType} ${goal || ''}`, 'diet_plan');
+
+    // ── Fetch recent symptoms if symptom-based mode ──
+    let symptomContext: string[] = [];
+    if (useSymptoms) {
+      symptomContext = await getRecentSymptoms(patientId as string, 10);
+    }
+
     // Call AI generator
-    console.log("Calling Gemini API...");
+    console.log("Calling Gemini API...", useSymptoms ? `(symptom-based: ${symptomContext.join(', ')})` : '(general mode)');
     const result = await generateDietPlanAI({
       height: patient.height,
       weight: patient.weight,
@@ -69,7 +80,9 @@ export const generateDietPlan = async (req: Request, res: Response): Promise<voi
       dietType,
       allergies: allergies || '',
       goal: goal || '',
-    });
+      useSymptoms: !!useSymptoms,
+      recentSymptoms: symptomContext,
+    }, patientHistory || undefined);
 
     // Upsert (one plan per patient)
     const savedPlan = await DietPlan.findOneAndUpdate(
@@ -83,7 +96,23 @@ export const generateDietPlan = async (req: Request, res: Response): Promise<voi
       { upsert: true, new: true }
     );
 
-    res.json({ success: true, plan: savedPlan });
+    // ── Store diet plan in memory AFTER success ──
+    storeDietPlan(patientId as string, { dietType: dietType as string, allergies: allergies as string, goal: goal as string }, result.plan).catch(() => {});
+
+    // ── Log interaction for continuous learning ──
+    logInteraction(
+      patientId as string,
+      'diet_plan',
+      `Diet plan: ${dietType}, goal: ${goal || 'maintenance'}, allergies: ${allergies || 'none'}${useSymptoms ? ', symptom-based' : ', general'}`,
+      `BMI: ${result.bmi}, Daily calories: ${result.dailyCalories}. Plan generated.`,
+    ).catch(() => {});
+
+    res.json({
+      success: true,
+      plan: savedPlan,
+      dietMode: useSymptoms ? 'symptom-based' : 'general',
+      symptomsUsed: useSymptoms ? symptomContext : [],
+    });
   } catch (error: any) {
     console.error("Diet Plan Error:", error);
     res.status(500).json({ success: false, error: error.message });
@@ -113,6 +142,17 @@ export const updateProfileForDiet = async (req: Request, res: Response): Promise
     }
 
     res.json({ success: true, profile: patient });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ── GET recent symptoms for diet plan toggle ────────────────────────────────
+export const getRecentSymptomsForUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId } = req.params;
+    const symptoms = await getRecentSymptoms(patientId as string, 10);
+    res.json({ success: true, symptoms });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

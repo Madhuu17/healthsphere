@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import Appointment from '../models/Appointment';
 import MedicalRecord from '../models/MedicalRecord';
 import Prescription from '../models/Prescription';
+import { storeAppointment } from '../utils/memoryService';
 
 // ── Helper: parse "09:00 AM" → minutes since midnight for sorting ──────────
 function timeSlotToMinutes(slot: string): number {
@@ -157,14 +158,40 @@ export const getPatientTimeline = async (req: Request, res: Response): Promise<v
       })),
     }));
 
-    // ── 4. Merge and sort newest first ────────────────────────────────────
-    const merged = [...apptEntries, ...recordEntries, ...prescriptionEntries].sort((a, b) => {
+    // ── 4. Deduplicate: remove consultation records that duplicate an appointment ──
+    // If a MedicalRecord has an appointmentId that's already in apptEntries, skip it
+    const apptIdSet = new Set(appts.map((a: any) => a.appointmentId).filter(Boolean));
+
+    const dedupedRecordEntries = recordEntries.filter((r: any) => {
+      // If this record was created from an appointment completion, skip it
+      // (the appointment entry already covers it)
+      if (r.category === 'consultation') {
+        // Check by appointmentId field on the raw record
+        const rawRecord = records.find((raw: any) => String(raw._id) === String(r._id));
+        if (rawRecord && (rawRecord as any).appointmentId && apptIdSet.has((rawRecord as any).appointmentId)) {
+          return false; // skip, already shown as appointment
+        }
+      }
+      return true;
+    });
+
+    // ── 5. Merge and sort newest first ────────────────────────────────────
+    const merged = [...apptEntries, ...dedupedRecordEntries, ...prescriptionEntries].sort((a, b) => {
       const da = new Date(a.date).getTime();
       const db = new Date(b.date).getTime();
       return db - da;
     });
 
-    res.status(200).json({ success: true, data: merged });
+    // ── 6. Final dedup by _id (safety net) ────────────────────────────────
+    const seen = new Set<string>();
+    const unique = merged.filter(item => {
+      const key = String(item._id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    res.status(200).json({ success: true, data: unique });
   } catch (error: any) {
     console.error('[Appointment] getPatientTimeline error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to fetch timeline' });
@@ -197,26 +224,39 @@ export const updateAppointmentStatus = async (req: Request, res: Response): Prom
       return;
     }
 
-    // Auto-create timeline entry when completed
+    // Auto-create timeline entry when completed (prevent duplicates via appointmentId)
     if (status === 'completed') {
       const existingEntry = await MedicalRecord.findOne({
-        patientId: appointment.patientId,
-        type: 'consultation',
-        title: { $regex: appointment.appointmentId, $options: 'i' }
+        appointmentId: appointment.appointmentId,
       });
 
       if (!existingEntry) {
-        await MedicalRecord.create({
-          patientId:   appointment.patientId,
-          doctorId:    appointment.doctorId,
-          type:        'consultation',
-          title:       `Consultation with ${appointment.doctorName} [${appointment.appointmentId}]`,
-          description: `${diagnosis ? `Diagnosis: ${diagnosis}. ` : ''}Completed at ${appointment.hospital}. Slot: ${appointment.timeSlot}. Date: ${appointment.date}.`,
-          date:        new Date(appointment.date),
-          attachments: reportUrl ? [reportUrl] : [],
-        });
-        console.log(`[Timeline] Created timeline entry for completed appointment ${appointment.appointmentId}`);
+        try {
+          await MedicalRecord.create({
+            patientId:     appointment.patientId,
+            doctorId:      appointment.doctorId,
+            appointmentId: appointment.appointmentId,  // unique key prevents duplicates
+            type:          'consultation',
+            title:         `Consultation with ${appointment.doctorName}`,
+            description:   `${diagnosis ? `Diagnosis: ${diagnosis}. ` : ''}Completed at ${appointment.hospital}. Slot: ${appointment.timeSlot}. Date: ${appointment.date}.`,
+            date:          new Date(appointment.date),
+            attachments:   reportUrl ? [reportUrl] : [],
+          });
+          console.log(`[Timeline] Created timeline entry for completed appointment ${appointment.appointmentId}`);
+        } catch (dupErr: any) {
+          // Catch duplicate key error from the sparse unique index as final safety net
+          if (dupErr.code !== 11000) throw dupErr;
+          console.log(`[Timeline] Duplicate prevented by index for appointment ${appointment.appointmentId}`);
+        }
       }
+
+      // ── Store in Hindsight memory ──
+      storeAppointment(
+        appointment.patientId,
+        appointment.doctorName,
+        diagnosis || '',
+        `Hospital: ${appointment.hospital}, Slot: ${appointment.timeSlot}, Date: ${appointment.date}`,
+      ).catch(() => {});
     }
 
     res.status(200).json({ success: true, data: appointment });

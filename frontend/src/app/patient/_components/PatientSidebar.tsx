@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar as CalendarIcon, FileText, Pill, Activity, Mail, LayoutDashboard, Stethoscope, Salad, Settings, LogOut } from "lucide-react";
+import { Calendar as CalendarIcon, FileText, Pill, Activity, Mail, LayoutDashboard, Stethoscope, Salad, Settings, LogOut, Brain } from "lucide-react";
 import { usePatient } from "../_context/PatientContext";
 
 const NAV = [
@@ -12,6 +12,7 @@ const NAV = [
   { name: "Medications",     href: "/patient/medications",     icon: Pill },
   { name: "Timeline",        href: "/patient/timeline",        icon: Activity },
   { name: "Diet Plan",       href: "/patient/diet-plan",       icon: Salad },
+  { name: "Health Report",   href: "/patient/health-report",   icon: Brain },
   { name: "Messages",        href: "/patient/messages",        icon: Mail },
 ];
 

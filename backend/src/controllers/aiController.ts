@@ -2,27 +2,77 @@ import { Request, Response } from 'express';
 import { checkSymptomsAI } from '../utils/aiSymptomChecker';
 import { matchDoctorAI } from '../utils/doctorMatcher';
 import { simplifyReportAI } from '../utils/reportSimplifier';
+import { storeSymptomCheck } from '../utils/memoryService';
+import {
+  buildEnrichedPrompt,
+  logInteraction,
+  getUserInsights,
+  getEvolutionLevel,
+  generateHealthReport,
+} from '../services/insightEngine';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHECK SYMPTOMS — enriched with full intelligence context
+═══════════════════════════════════════════════════════════════════════════ */
 
 export const checkSymptoms = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { symptoms } = req.body;
+    const { symptoms, userId } = req.body;
 
     if (!symptoms || typeof symptoms !== 'string' || symptoms.trim() === '') {
       res.status(400).json({ success: false, message: 'symptoms field is required and must be a non-empty string' });
       return;
     }
 
-    const result = await checkSymptomsAI(symptoms.trim());
+    // ── Fetch enriched intelligence context BEFORE AI call ──
+    let patientHistory = '';
+    if (userId) {
+      patientHistory = await buildEnrichedPrompt(userId, symptoms.trim(), 'symptom_check');
+    }
+
+    // ── Call AI with enriched prompt ──
+    const result = await checkSymptomsAI(symptoms.trim(), patientHistory || undefined);
+
+    // ── Store in Hindsight memory ──
+    if (userId) {
+      storeSymptomCheck(userId, symptoms.trim(), result).catch(() => {});
+    }
+
+    // ── Log interaction + update insights (continuous learning loop) ──
+    if (userId) {
+      logInteraction(
+        userId,
+        'symptom_check',
+        symptoms.trim(),
+        `Severity: ${result.severity}/10. ${result.explanation}`,
+        {
+          severity:   result.severity,
+          conditions: result.possibleConditions || [],
+        },
+      ).catch(() => {});
+    }
+
+    // ── Fetch evolution level for response ──
+    let evolution = null;
+    if (userId) {
+      evolution = await getEvolutionLevel(userId).catch(() => null);
+    }
 
     res.status(200).json({
       success: true,
       data: result,
+      memoryActive: !!patientHistory,
+      evolution,
     });
   } catch (error: any) {
     console.error('[AI] checkSymptoms error:', error.message);
     res.status(500).json({ success: false, message: 'AI symptom analysis failed', error: error.message });
   }
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MATCH DOCTOR
+═══════════════════════════════════════════════════════════════════════════ */
 
 export const matchDoctor = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -45,6 +95,10 @@ export const matchDoctor = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIMPLIFY REPORT
+═══════════════════════════════════════════════════════════════════════════ */
+
 export const simplifyReport = async (req: Request, res: Response): Promise<void> => {
   try {
     const { report } = req.body;
@@ -63,5 +117,86 @@ export const simplifyReport = async (req: Request, res: Response): Promise<void>
   } catch (error: any) {
     console.error('[AI] simplifyReport error:', error.message);
     res.status(500).json({ success: false, message: 'AI report simplification failed', error: error.message });
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MEMORY INSIGHTS — enhanced with persistent insights + evolution
+═══════════════════════════════════════════════════════════════════════════ */
+
+export const getInsights = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.params.userId as string;
+
+    if (!userId) {
+      res.status(400).json({ success: false, message: 'userId is required' });
+      return;
+    }
+
+    const [insights, evolution] = await Promise.all([
+      getUserInsights(userId),
+      getEvolutionLevel(userId),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        insights,
+        evolution,
+      },
+    });
+  } catch (error: any) {
+    console.error('[AI] getInsights error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to fetch insights', error: error.message });
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EVOLUTION LEVEL
+═══════════════════════════════════════════════════════════════════════════ */
+
+export const getEvolution = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.params.userId as string;
+
+    if (!userId) {
+      res.status(400).json({ success: false, message: 'userId is required' });
+      return;
+    }
+
+    const evolution = await getEvolutionLevel(userId);
+
+    res.status(200).json({
+      success: true,
+      data: evolution,
+    });
+  } catch (error: any) {
+    console.error('[AI] getEvolution error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to fetch evolution level', error: error.message });
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HEALTH INTELLIGENCE REPORT
+═══════════════════════════════════════════════════════════════════════════ */
+
+export const getHealthReport = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.params.userId as string;
+
+    if (!userId) {
+      res.status(400).json({ success: false, message: 'userId is required' });
+      return;
+    }
+
+    const report = await generateHealthReport(userId);
+
+    res.status(200).json({
+      success: true,
+      data: report,
+    });
+  } catch (error: any) {
+    console.error('[AI] getHealthReport error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to generate health report', error: error.message });
   }
 };

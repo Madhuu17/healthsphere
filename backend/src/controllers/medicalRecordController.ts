@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import MedicalRecord from '../models/MedicalRecord';
 import { generateAiSummary } from '../utils/aiSummarizer';
+import { getPatientHistory, storeMedicalReport } from '../utils/memoryService';
+import { logInteraction, updateContextFromReport, buildEnrichedPrompt } from '../services/insightEngine';
 import path from 'path';
 
 /**
@@ -34,6 +36,17 @@ export const createRecord = async (req: Request, res: Response): Promise<void> =
       attachments,
       aiSummary: null,
     });
+
+    // ── Store in Hindsight memory ──
+    storeMedicalReport(patientId, title, description).catch(() => {});
+
+    // ── Log interaction for continuous learning ──
+    logInteraction(
+      patientId,
+      recordType === 'prescription' ? 'prescription' : 'report_summary',
+      `${title}: ${description.slice(0, 300)}`,
+      'Record created',
+    ).catch(() => {});
 
     res.status(201).json({ success: true, record });
   } catch (error: any) {
@@ -78,7 +91,15 @@ export const summarizeRecord = async (req: Request, res: Response): Promise<void
     }
 
     const content = `Title: ${record.title}\n\nDetails: ${record.description}`;
-    const result  = await generateAiSummary(content, record.type, record.title);
+
+    // ── Fetch enriched intelligence context ──
+    const patientHistory = await buildEnrichedPrompt(
+      record.patientId,
+      `${record.type} ${record.title}`,
+      'report_summary',
+    );
+
+    const result  = await generateAiSummary(content, record.type, record.title, patientHistory || undefined);
 
     const updated = await MedicalRecord.findOneAndUpdate(
       { _id: recordId, aiSummary: null },
@@ -88,6 +109,25 @@ export const summarizeRecord = async (req: Request, res: Response): Promise<void
 
     const finalSummary = updated?.aiSummary ?? record.aiSummary;
     const finalDate    = updated?.summaryGeneratedAt ?? record.summaryGeneratedAt;
+
+    // ── Store summary in memory ──
+    if (updated) {
+      storeMedicalReport(record.patientId, record.title, record.description, result.formatted).catch(() => {});
+
+      // ── Log interaction + update medical context ──
+      logInteraction(
+        record.patientId,
+        'report_summary',
+        `${record.title}: ${record.description.slice(0, 300)}`,
+        result.formatted.slice(0, 500),
+      ).catch(() => {});
+
+      updateContextFromReport(
+        record.patientId,
+        record.title,
+        result.formatted.slice(0, 500),
+      ).catch(() => {});
+    }
 
     res.json({ success: true, alreadyExists: !updated, aiSummary: finalSummary, summaryGeneratedAt: finalDate });
   } catch (error: any) {

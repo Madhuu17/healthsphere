@@ -331,7 +331,16 @@ export default function DoctorPatientRecords() {
               <div className="relative">
                 <div className="absolute left-[22px] top-0 bottom-0 w-0.5 bg-slate-100"/>
                 <div className="space-y-4">
-                  {patientTimeline.map((r: any, i: number) => {
+                  {(() => {
+                    // Deduplicate timeline entries by _id
+                    const seen = new Set<string>();
+                    const uniqueTimeline = patientTimeline.filter((r: any) => {
+                      const key = r._id || r.appointmentId || `${r.title}-${r.date}`;
+                      if (seen.has(key)) return false;
+                      seen.add(key);
+                      return true;
+                    });
+                    return uniqueTimeline.map((r: any, i: number) => {
                     const meta = TYPE_META[r.type] || TYPE_META.consultation;
                     const Icon = meta.icon;
                     return (
@@ -369,7 +378,8 @@ export default function DoctorPatientRecords() {
                         </div>
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
               </div>
             )}

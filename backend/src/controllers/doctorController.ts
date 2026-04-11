@@ -4,6 +4,9 @@ import Doctor from '../models/Doctor';
 import Appointment from '../models/Appointment';
 import MedicalRecord from '../models/MedicalRecord';
 import { sendOTP } from '../utils/sendOTP';
+import { getRecentSymptoms } from '../services/insightEngine';
+import Interaction from '../models/Interaction';
+import { GoogleGenAI } from '@google/genai';
 
 const otpStore: Record<string, string> = {};
 
@@ -185,8 +188,26 @@ export const verifyPatientAccess = async (req: Request, res: Response): Promise<
     if ((otpStore[patientId] && otpStore[patientId] === otp) || otp === '000000') {
       delete otpStore[patientId];
       const patient  = await Patient.findOne({ patientId }).select('-passwordHash');
-      const timeline = await MedicalRecord.find({ patientId }).sort({ date: -1 });
-      const appointments = await Appointment.find({ patientId }).sort({ date: -1 });
+      const [rawRecords, appointments] = await Promise.all([
+        MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
+        Appointment.find({ patientId }).sort({ date: -1 }).lean(),
+      ]);
+
+      // Deduplicate: remove medical records that duplicate a completed appointment
+      const apptIdSet = new Set(appointments.map((a: any) => a.appointmentId).filter(Boolean));
+      const seen = new Set<string>();
+      const timeline = rawRecords.filter((r: any) => {
+        // Skip if this consultation record's appointmentId is already in an appointment
+        if (r.type === 'consultation' && r.appointmentId && apptIdSet.has(r.appointmentId)) {
+          return false;
+        }
+        // _id-based dedup safety
+        const key = String(r._id);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
       res.json({ message: 'Access granted.', patient, timeline, appointments });
     } else {
       res.status(401).json({ message: 'Invalid or expired OTP. Access Denied.' });
@@ -260,5 +281,92 @@ export const setupDoctorProfile = async (req: Request, res: Response): Promise<v
   } catch (error) {
     if (error instanceof Error) res.status(500).json({ message: error.message });
     else res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─── AI Symptom Summary for Doctor ────────────────────────────────────────────
+export const getPatientSummary = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const patientId = req.params.patientId as string;
+
+    if (!patientId) {
+      res.status(400).json({ success: false, message: 'patientId is required' });
+      return;
+    }
+
+    // 1. Fetch patient info
+    const patient = await Patient.findOne({ patientId }).select('name age gender').lean();
+
+    // 2. Fetch recent interactions (last 10)
+    const recentInteractions = await Interaction.find({ userId: patientId })
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .lean();
+
+    // 3. Fetch recent symptoms from insightEngine
+    const recentSymptoms = await getRecentSymptoms(patientId, 10);
+
+    if (recentSymptoms.length === 0 && recentInteractions.length === 0) {
+      res.json({
+        success: true,
+        data: {
+          patientName: (patient as any)?.name || 'Unknown',
+          summary: 'No recent symptom data available for this patient. The patient has not yet interacted with the AI symptom checker.',
+          symptoms: [],
+          interactionCount: 0,
+          generatedAt: new Date().toISOString(),
+        },
+      });
+      return;
+    }
+
+    // 4. Build context for AI summary
+    const interactionSummaries = recentInteractions
+      .slice(0, 5)
+      .map((i: any, idx: number) => {
+        const date = new Date(i.timestamp).toLocaleDateString();
+        return `${idx + 1}. [${i.type}] (${date}) — "${i.userInput?.slice(0, 150)}" → Keywords: ${(i.metadata?.keywords || []).join(', ') || 'none'}`;
+      })
+      .join('\n');
+
+    const symptomList = recentSymptoms.join(', ');
+
+    // 5. Generate AI summary
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+    const prompt = `You are a medical AI assistant helping a doctor quickly understand a patient's recent health concerns.
+
+Patient Info:
+- Name: ${(patient as any)?.name || 'Unknown'}
+- Age: ${(patient as any)?.age || 'Unknown'}
+- Gender: ${(patient as any)?.gender || 'Unknown'}
+
+Recent Symptoms Reported: ${symptomList || 'None'}
+
+Recent Interactions:
+${interactionSummaries || 'No recent interactions'}
+
+Task: Summarize the patient's recent symptoms in a short, clear, non-medical paragraph for a doctor to quickly understand. Keep it to 2-3 sentences. Be concise and professional. Do not use bullet points. Do not give medical advice — just summarize what the patient has reported.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    const summary = (response.text ?? '').trim();
+
+    res.json({
+      success: true,
+      data: {
+        patientName: (patient as any)?.name || 'Unknown',
+        summary,
+        symptoms: recentSymptoms,
+        interactionCount: recentInteractions.length,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    console.error('[Doctor] getPatientSummary error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to generate patient summary', error: error.message });
   }
 };

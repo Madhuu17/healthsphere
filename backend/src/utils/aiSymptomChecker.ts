@@ -9,8 +9,15 @@ export interface SymptomCheckResult {
   possibleConditions: string[];
 }
 
-export async function checkSymptomsAI(symptoms: string): Promise<SymptomCheckResult> {
-  const prompt = `You are a medical AI assistant. A patient reports the following symptoms: "${symptoms}"
+export async function checkSymptomsAI(
+  symptoms: string,
+  patientHistory?: string,
+): Promise<SymptomCheckResult> {
+  const historyBlock = patientHistory
+    ? `\n\n${patientHistory}\n\nConsider the patient's medical history when analyzing current symptoms.\nIf you detect a pattern of worsening or recurring symptoms, flag this in your explanation.\n`
+    : '';
+
+  const prompt = `You are a medical AI assistant. A patient reports the following symptoms: "${symptoms}"${historyBlock}
 
 Analyze these symptoms and respond ONLY with a valid JSON object (no markdown, no code blocks) in this exact format:
 {
@@ -24,7 +31,8 @@ Rules:
 - severity 1-3: mild, home care sufficient
 - severity 4-6: moderate, monitor closely
 - severity 7-10: severe, consult a doctor immediately
-- recommendation must be exactly 'home' or 'consult'`;
+- recommendation must be exactly 'home' or 'consult'
+- If patient history is provided, reference relevant past events in your explanation`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',

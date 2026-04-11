@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Salad, Sparkles, AlertCircle, X, ChevronDown, ChevronUp,
   Loader2, Apple, Coffee, UtensilsCrossed, Cookie, Moon,
-  Ruler, Weight, RefreshCw, Save, CheckCircle2, Info
+  Ruler, Weight, RefreshCw, Save, CheckCircle2, Info,
+  Activity, Stethoscope, Zap,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ function parsePlanSections(plan: string) {
     "LUNCH":             { icon: UtensilsCrossed,  color: "from-teal-400 to-emerald-500" },
     "EVENING SNACK":     { icon: Apple,            color: "from-pink-400 to-rose-500" },
     "DINNER":            { icon: Moon,             color: "from-indigo-400 to-violet-500" },
+    "DIET BASIS":        { icon: Info,             color: "from-cyan-400 to-blue-500" },
     "NOTES":             { icon: Info,             color: "from-slate-400 to-slate-500" },
   };
 
@@ -117,12 +119,33 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
   const [genError, setGenError]       = useState("");
   const [justSaved, setJustSaved]     = useState(false);
 
+  // ── Symptom-based diet toggle ───────────────────────────────────────────
+  const [useSymptoms, setUseSymptoms] = useState(false);
+  const [recentSymptoms, setRecentSymptoms] = useState<string[]>([]);
+  const [symptomsLoading, setSymptomsLoading] = useState(false);
+  const [dietMode, setDietMode] = useState<'general' | 'symptom-based'>('general');
+  const [symptomsUsed, setSymptomsUsed] = useState<string[]>([]);
+
   // ── Auto-open modal / load saved plan on mount ───────────────────────────
   useEffect(() => {
     if (!profile?.height || !profile?.weight) {
       setShowProfileModal(true);
     } else {
       loadSavedPlan();
+    }
+    // Fetch recent symptoms
+    const patientId = profile?.patientId || profile?.id;
+    if (patientId) {
+      setSymptomsLoading(true);
+      fetch(`http://localhost:5000/api/diet-plans/${patientId}/recent-symptoms`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.symptoms?.length > 0) {
+            setRecentSymptoms(data.symptoms);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setSymptomsLoading(false));
     }
   }, [profile?.patientId]);
 
@@ -194,7 +217,7 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
       const res = await fetch(`http://localhost:5000/api/diet-plans/${patientId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(prefs),
+        body: JSON.stringify({ ...prefs, useSymptoms }),
       });
       const data = await res.json();
       if (!data.success) {
@@ -202,6 +225,8 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
         throw new Error(data.message);
       }
       setSavedPlan(data.plan);
+      setDietMode(data.dietMode || 'general');
+      setSymptomsUsed(data.symptomsUsed || []);
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 3000);
     } catch (err: any) {
@@ -358,6 +383,49 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
               </div>
             )}
 
+            {/* Symptom-based diet toggle */}
+            {recentSymptoms.length > 0 && (
+              <div className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl p-4 border border-violet-100/60">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Stethoscope size={16} className="text-violet-600" />
+                    <p className="text-sm font-bold text-slate-800">Use Recent Symptoms?</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseSymptoms(!useSymptoms)}
+                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
+                      useSymptoms ? 'bg-violet-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                      useSymptoms ? 'translate-x-6' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mb-2">
+                  {useSymptoms
+                    ? '✨ Diet will be tailored to manage your recent symptoms'
+                    : 'Toggle ON to get a diet plan based on your recent symptoms'
+                  }
+                </p>
+                {useSymptoms && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {recentSymptoms.slice(0, 8).map((s, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-white/80 border border-violet-200/60 rounded-lg text-[10px] font-bold text-violet-700 capitalize">
+                        {s}
+                      </span>
+                    ))}
+                    {recentSymptoms.length > 8 && (
+                      <span className="px-2 py-0.5 bg-violet-100 rounded-lg text-[10px] font-bold text-violet-600">
+                        +{recentSymptoms.length - 8} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Generate Button */}
             <button onClick={handleGenerate}
               disabled={generating || !hasProfile}
@@ -457,6 +525,25 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
                 {calorieHeader && (
                   <p className="text-sm text-teal-600 font-semibold mt-0.5">{calorieHeader}</p>
                 )}
+                {/* Diet mode badge */}
+                <div className="flex items-center gap-2 mt-1.5">
+                  {dietMode === 'symptom-based' ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-violet-700 bg-violet-50 border border-violet-200/60 px-2.5 py-1 rounded-full">
+                      <Stethoscope size={10} />
+                      Symptom-Based Diet
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-teal-700 bg-teal-50 border border-teal-200/60 px-2.5 py-1 rounded-full">
+                      <Zap size={10} />
+                      General Profile-Based Diet
+                    </span>
+                  )}
+                  {symptomsUsed.length > 0 && (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      · {symptomsUsed.slice(0, 3).join(', ')}{symptomsUsed.length > 3 ? ` +${symptomsUsed.length - 3}` : ''}
+                    </span>
+                  )}
+                </div>
               </div>
               <span className="text-xs text-slate-400 font-medium">
                 Generated on {(() => { const d = new Date(savedPlan.createdAt); return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`; })()}
@@ -468,13 +555,14 @@ export default function DietPlanTab({ profile, onProfileUpdate }: DietPlanTabPro
               {sections.map((sec, idx) => {
                 const Icon = sec.icon;
                 const isNotes = sec.title === "NOTES";
+                const isDietBasis = sec.title === "DIET BASIS";
                 return (
                   <motion.div
                     key={sec.title}
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.06 }}
-                    className={`bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden ${isNotes ? "md:col-span-2 xl:col-span-3" : ""}`}>
+                    className={`bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden ${(isNotes || isDietBasis) ? "md:col-span-2 xl:col-span-3" : ""}`}>
 
                     {/* Meal Header gradient */}
                     <div className={`bg-gradient-to-r ${sec.color} p-4 flex items-center gap-3`}>

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Calendar, Lock, Award, Stethoscope, Star, ArrowUp, AlertTriangle, CheckCircle, Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Calendar, Lock, Award, Stethoscope, Star, ArrowUp, AlertTriangle,
+  CheckCircle, Zap, X, Brain, Sparkles, Loader2, Clock, Building2,
+} from "lucide-react";
 import { useDoctor } from "../_context/DoctorContext";
 
 // ── Severity helpers ──────────────────────────────────────────────────────────
@@ -13,7 +17,6 @@ function severityMeta(score: number | null | undefined) {
 }
 
 function parseTime(slot: string): number {
-  // e.g. "09:00 AM", "02:30 PM"
   const match = slot.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!match) return 0;
   let h = parseInt(match[1]);
@@ -24,12 +27,26 @@ function parseTime(slot: string): number {
   return h * 60 + m;
 }
 
-export default function DoctorOverview() {
-  const { doctor, doctorProfile, appointments, blockedDates, totalApptThisWeek, today, formatDate } = useDoctor();
+interface PatientSummaryData {
+  patientName: string;
+  summary: string;
+  symptoms: string[];
+  interactionCount: number;
+  generatedAt: string;
+}
 
-  // Local priority state (for instant UI feedback; backend is source of truth on reload)
+export default function DoctorOverview() {
+  const { doctor, doctorProfile, appointments, blockedDates, totalApptThisWeek, today, formatDate, API } = useDoctor();
+
+  // Local priority state
   const [priorityIds, setPriorityIds] = useState<Set<string>>(new Set());
   const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // AI Summary modal state
+  const [selectedAppt, setSelectedAppt] = useState<any>(null);
+  const [summaryData, setSummaryData] = useState<PatientSummaryData | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
 
   // Today's appointments — exclude past slots, sort: priority → severity (desc) → time (asc)
   const todayAppts = useMemo(() => {
@@ -41,29 +58,26 @@ export default function DoctorOverview() {
     const list = appointments.filter((a: any) => {
       if (a.date !== today) return false;
       if (a.status === "completed" || a.status === "cancelled") return false;
-      // Exclude slots that have already passed today
       const slotMinutes = parseTime(a.timeSlot);
       return slotMinutes >= nowMinutes;
     });
 
     return list.sort((a: any, b: any) => {
-      // 1. Priority first
       const aPri = a.isPriority || priorityIds.has(a.appointmentId) ? 1 : 0;
       const bPri = b.isPriority || priorityIds.has(b.appointmentId) ? 1 : 0;
       if (bPri !== aPri) return bPri - aPri;
-      // 2. Higher severity first
       const aSev = a.severityScore ?? 0;
       const bSev = b.severityScore ?? 0;
       if (bSev !== aSev) return bSev - aSev;
-      // 3. Earlier time first
       return parseTime(a.timeSlot) - parseTime(b.timeSlot);
     });
   }, [appointments, today, priorityIds]);
 
-  async function handlePrioritize(appt: any) {
+  async function handlePrioritize(e: React.MouseEvent, appt: any) {
+    e.stopPropagation(); // Don't open modal
     setLoadingId(appt.appointmentId);
     try {
-      await fetch(`http://localhost:5000/api/appointments/${appt.appointmentId}/prioritize`, {
+      await fetch(`${API}/api/appointments/${appt.appointmentId}/prioritize`, {
         method: "PATCH",
       });
       setPriorityIds(prev => new Set([...prev, appt.appointmentId]));
@@ -72,6 +86,30 @@ export default function DoctorOverview() {
     } finally {
       setLoadingId(null);
     }
+  }
+
+  async function handlePatientClick(appt: any) {
+    setSelectedAppt(appt);
+    setSummaryData(null);
+    setSummaryError("");
+    setSummaryLoading(true);
+
+    try {
+      const res = await fetch(`${API}/api/doctor/patient-summary/${appt.patientId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to load summary");
+      setSummaryData(data.data);
+    } catch (err: any) {
+      setSummaryError(err.message || "Error generating summary");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  function closeModal() {
+    setSelectedAppt(null);
+    setSummaryData(null);
+    setSummaryError("");
   }
 
   return (
@@ -94,7 +132,7 @@ export default function DoctorOverview() {
         ))}
       </div>
 
-      {/* Today's Appointments — centered + priority sorted */}
+      {/* Today's Appointments */}
       <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
           {/* Header */}
@@ -142,10 +180,11 @@ export default function DoctorOverview() {
                 return (
                   <div
                     key={a.appointmentId}
-                    className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+                    onClick={() => handlePatientClick(a)}
+                    className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-md ${
                       isPri
                         ? "border-blue-300 bg-blue-50/60 shadow-md shadow-blue-100"
-                        : `${meta.border} ${meta.bg}`
+                        : `${meta.border} ${meta.bg} hover:border-blue-200`
                     }`}
                   >
                     {/* Avatar */}
@@ -192,7 +231,7 @@ export default function DoctorOverview() {
                     {/* Prioritize button */}
                     {!isPri && (
                       <button
-                        onClick={() => handlePrioritize(a)}
+                        onClick={(e) => handlePrioritize(e, a)}
                         disabled={isLoading}
                         title="Move to top and notify patient"
                         className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors disabled:opacity-50"
@@ -218,6 +257,135 @@ export default function DoctorOverview() {
           )}
         </div>
       </div>
+
+      {/* ═══════ Patient Summary Modal ═══════ */}
+      <AnimatePresence>
+        {selectedAppt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 relative">
+                <button onClick={closeModal} className="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
+                  <X size={16} className="text-white" />
+                </button>
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-white text-2xl font-black backdrop-blur-sm">
+                    {selectedAppt.patientName?.[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-white">{selectedAppt.patientName}</h2>
+                    <p className="text-blue-200 text-sm font-medium mt-0.5">{selectedAppt.patientId}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Appointment Details */}
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Appointment Details</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5">
+                    <Clock size={14} className="text-blue-500" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Time</p>
+                      <p className="text-sm font-bold text-slate-700">{selectedAppt.timeSlot}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5">
+                    <Calendar size={14} className="text-teal-500" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Date</p>
+                      <p className="text-sm font-bold text-slate-700">{formatDate(selectedAppt.date)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5">
+                    <Building2 size={14} className="text-purple-500" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Hospital</p>
+                      <p className="text-sm font-bold text-slate-700 truncate">{selectedAppt.hospital}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5">
+                    <Stethoscope size={14} className="text-orange-500" />
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-semibold">Severity</p>
+                      <div className="flex items-center gap-1.5">
+                        {(() => {
+                          const meta = severityMeta(selectedAppt.severityScore);
+                          return (
+                            <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${meta.color}`}>
+                              {meta.label} {selectedAppt.severityScore ? `(${selectedAppt.severityScore}/10)` : ""}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Summary Section */}
+              <div className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
+                    <Brain size={14} className="text-white" />
+                  </div>
+                  <h3 className="text-xs font-black text-violet-600 uppercase tracking-widest">AI-Generated Summary</h3>
+                  <Sparkles size={12} className="text-amber-400" />
+                </div>
+
+                {summaryLoading ? (
+                  <div className="flex items-center gap-3 py-8 justify-center">
+                    <Loader2 size={20} className="animate-spin text-violet-500" />
+                    <span className="text-sm font-semibold text-violet-500">Analyzing patient history...</span>
+                  </div>
+                ) : summaryError ? (
+                  <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
+                    <p className="text-sm text-red-600 font-medium">{summaryError}</p>
+                  </div>
+                ) : summaryData ? (
+                  <div className="space-y-4">
+                    {/* Summary paragraph */}
+                    <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-2xl p-4 border border-violet-100/50">
+                      <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                        {summaryData.summary}
+                      </p>
+                    </div>
+
+                    {/* Symptom tags */}
+                    {summaryData.symptoms.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Recent Symptoms</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {summaryData.symptoms.slice(0, 10).map((s, i) => (
+                            <span key={i} className="px-2.5 py-1 bg-white border border-violet-200/60 rounded-lg text-xs font-semibold text-violet-700 capitalize">
+                              {s}
+                            </span>
+                          ))}
+                          {summaryData.symptoms.length > 10 && (
+                            <span className="px-2.5 py-1 bg-violet-100 rounded-lg text-xs font-bold text-violet-600">
+                              +{summaryData.symptoms.length - 10} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      Based on {summaryData.interactionCount} interaction{summaryData.interactionCount !== 1 ? "s" : ""} · Generated just now
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   verifyPatientAccess,
   addPatientRecord,
   setupDoctorProfile,
+  getPatientSummary,
 } from '../controllers/doctorController';
 
 const router = express.Router();
@@ -23,6 +24,9 @@ router.post('/book',               bookAppointment);
 router.get('/slots',               getAvailableSlots);
 router.post('/search',             requestPatientAccess);
 router.post('/verify',             verifyPatientAccess);
+
+// AI Symptom Summary for doctor
+router.get('/patient-summary/:patientId', getPatientSummary);
 
 // Multipart form with up to 5 image/file attachments
 router.post('/add-record', upload.array('attachments', 5), addPatientRecord);

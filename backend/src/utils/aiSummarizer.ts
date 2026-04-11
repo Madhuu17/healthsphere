@@ -85,13 +85,18 @@ export interface AISummaryResult {
 export async function generateAiSummary(
   content: string,
   recordType: string,
-  title: string
+  title: string,
+  patientHistory?: string,
 ): Promise<AISummaryResult> {
   const isPrescription = recordType === 'prescription';
 
+  const historyBlock = patientHistory
+    ? `\n\nPatient Medical History (from memory):\n${patientHistory}\n\nUse this history to provide more relevant context in your summary. Reference any known conditions or past treatments.\n`
+    : '';
+
   const prompt = isPrescription
-    ? PRESCRIPTION_PROMPT(content)
-    : REPORT_PROMPT(content, title);
+    ? PRESCRIPTION_PROMPT(content) + historyBlock
+    : REPORT_PROMPT(content, title) + historyBlock;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',

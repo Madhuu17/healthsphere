@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity, Stethoscope, UserRound, CreditCard,
-  FileText, Pill, Mail, LogOut, ArrowLeft, Calendar,
+  FileText, Pill, Mail, LogOut, ArrowLeft, Calendar, Brain,
 } from "lucide-react";
-
+import MemoryInsights from "../_components/MemoryInsights";
+import AIEvolution from "../_components/AIEvolution";
 
 interface SymptomResult {
   severity: number;
@@ -47,7 +48,19 @@ export default function SymptomCheckerPage() {
   const [doctorMatch, setDoctorMatch] = useState<DoctorMatchResult | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState("");
+  const [userId, setUserId] = useState("");
+  const [memoryActive, setMemoryActive] = useState(false);
 
+  // Read userId from localStorage on mount
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        setUserId(user.id || user.patientId || "");
+      }
+    } catch {}
+  }, []);
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("isLoggedIn");
@@ -65,11 +78,12 @@ export default function SymptomCheckerPage() {
       const res = await fetch("http://localhost:5000/api/ai/symptoms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symptoms }),
+        body: JSON.stringify({ symptoms, userId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Something went wrong");
       setResult(data.data);
+      setMemoryActive(!!data.memoryActive);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to analyze symptoms. Please try again.");
     } finally {
@@ -183,8 +197,17 @@ export default function SymptomCheckerPage() {
             <h1 className="text-xl font-black text-slate-800 tracking-tight">Symptom Checker</h1>
             <p className="text-sm text-slate-500 mt-0.5">AI-powered symptom analysis</p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hidden md:block">
-            {new Date().toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, month: "2-digit", day: "2-digit", year: "numeric" })}
+          <div className="flex items-center gap-3">
+            {userId && <AIEvolution userId={userId} compact />}
+            {memoryActive && (
+              <div className="bg-gradient-to-r from-violet-500 to-purple-500 rounded-full px-4 py-2 text-xs font-bold text-white flex items-center gap-1.5 shadow-sm" style={{ animation: "fadeIn 500ms ease-out" }}>
+                <Brain size={13} />
+                AI Memory Active ✨
+              </div>
+            )}
+            <div className="bg-white border border-slate-200 rounded-full px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hidden md:block">
+              {new Date().toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, month: "2-digit", day: "2-digit", year: "numeric" })}
+            </div>
           </div>
         </header>
 
@@ -365,6 +388,14 @@ export default function SymptomCheckerPage() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Memory Insights Panel */}
+            {userId && (
+              <>
+                <AIEvolution userId={userId} />
+                <MemoryInsights userId={userId} />
+              </>
             )}
 
           </div>

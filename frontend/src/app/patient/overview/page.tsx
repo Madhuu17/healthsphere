@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   UserRound, Calendar as CalendarIcon, FileText, Pill,
-  Activity, QrCode, Edit2, Stethoscope, Clock,
+  Activity, QrCode, Edit2, Stethoscope, Clock, Brain,
 } from "lucide-react";
 import { usePatient } from "../_context/PatientContext";
+import Link from "next/link";
+import AIEvolution from "../_components/AIEvolution";
 
 // ── Medication mini-card type ──────────────────────────────────────────────
 interface ActiveMed {
@@ -35,6 +36,7 @@ export default function PatientOverview() {
 
   const [activeMeds, setActiveMeds] = useState<ActiveMed[]>([]);
   const [medsLoading, setMedsLoading] = useState(true);
+  const userId = profile?.patientId || profile?.id || "";
 
   useEffect(() => {
     const patientId = profile?.patientId || profile?.id;
@@ -240,7 +242,7 @@ export default function PatientOverview() {
           </div>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats + AI Intelligence */}
         <div className="bg-white rounded-3xl p-7 border border-slate-100 shadow-sm">
           <h3 className="text-xl font-bold text-slate-800 mb-5">Quick Stats</h3>
           <div className="grid grid-cols-2 gap-4">
@@ -256,6 +258,21 @@ export default function PatientOverview() {
               </div>
             ))}
           </div>
+          {/* AI Intelligence link */}
+          {userId && userId !== "..." && (
+            <Link
+              href="/patient/health-report"
+              className="mt-4 flex items-center gap-3 bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl p-4 border border-violet-100/60 hover:border-violet-200 transition-all group cursor-pointer"
+            >
+              <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-violet-500/20">
+                <Brain size={18} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-slate-800">AI Health Intelligence</p>
+                <p className="text-xs text-violet-600 font-semibold">View your personalized health report →</p>
+              </div>
+            </Link>
+          )}
         </div>
       </div>
     </div>
