@@ -5,10 +5,12 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import connectDB from './config/db';
 import { startMedicationScheduler } from './utils/medicationScheduler';
+import { startMedicationReminderScheduler } from './utils/medicationReminderScheduler';
 
 dotenv.config();
 connectDB().then(() => {
   startMedicationScheduler();
+  startMedicationReminderScheduler();
 });
 
 const app = express();

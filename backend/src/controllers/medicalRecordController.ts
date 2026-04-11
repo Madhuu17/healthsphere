@@ -1,23 +1,21 @@
 import { Request, Response } from 'express';
 import MedicalRecord from '../models/MedicalRecord';
 import { generateAiSummary } from '../utils/aiSummarizer';
+import path from 'path';
 
 /**
  * POST /api/medical-records
- *
  * Creates a new medical record (prescription or report).
- * aiSummary is always null on creation — patient generates it on demand.
  */
 export const createRecord = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { patientId, doctorId, type, title, description, date } = req.body;
+    const { patientId, doctorId, type, recordType, title, description, date } = req.body;
 
     if (!patientId || !type || !title || !description) {
       res.status(400).json({ success: false, message: 'patientId, type, title, and description are required.' });
       return;
     }
 
-    // Build attachment URLs (if files uploaded via multipart)
     const files = (req as any).files as Express.Multer.File[] | undefined;
     const attachments = files
       ? files.map((f) => `http://localhost:5000/uploads/${f.filename}`)
@@ -27,13 +25,14 @@ export const createRecord = async (req: Request, res: Response): Promise<void> =
 
     const record = await MedicalRecord.create({
       patientId,
-      doctorId: doctorId || undefined,
-      type:     type || 'prescription',
+      doctorId:   doctorId || undefined,
+      type:       type || 'prescription',
+      recordType: recordType === 'prescription' ? 'prescription' : 'report',
       title,
       description,
-      date:     date ? new Date(date) : new Date(),
+      date:       date ? new Date(date) : new Date(),
       attachments,
-      aiSummary: null, // always null on create — generated on demand
+      aiSummary: null,
     });
 
     res.status(201).json({ success: true, record });
@@ -45,7 +44,6 @@ export const createRecord = async (req: Request, res: Response): Promise<void> =
 
 /**
  * GET /api/medical-records/:recordId
- *
  * Returns a single medical record by its MongoDB _id.
  */
 export const getRecordById = async (req: Request, res: Response): Promise<void> => {
@@ -63,85 +61,150 @@ export const getRecordById = async (req: Request, res: Response): Promise<void> 
 
 /**
  * POST /api/medical-records/summarize/:recordId
- *
- * Generates an AI summary for a single medical record.
- * - If aiSummary already exists → returns it immediately (no AI call)
- * - If aiSummary is null → calls Gemini, saves result, returns it
- * This guarantees ONE-TIME generation per record (idempotent).
+ * Generates an AI summary (one-time, idempotent).
  */
 export const summarizeRecord = async (req: Request, res: Response): Promise<void> => {
   try {
     const { recordId } = req.params;
-
-    // 1. Fetch the record
     const record = await MedicalRecord.findById(recordId);
     if (!record) {
       res.status(404).json({ success: false, message: 'Medical record not found.' });
       return;
     }
 
-    // 2. Guard: summary already exists → return stored summary, no API call
     if (record.aiSummary) {
-      res.json({
-        success: true,
-        alreadyExists: true,
-        aiSummary: record.aiSummary,
-        summaryGeneratedAt: record.summaryGeneratedAt,
-      });
+      res.json({ success: true, alreadyExists: true, aiSummary: record.aiSummary, summaryGeneratedAt: record.summaryGeneratedAt });
       return;
     }
 
-    // 3. Build the content to summarize
-    //    We include title + description as the full context
     const content = `Title: ${record.title}\n\nDetails: ${record.description}`;
+    const result  = await generateAiSummary(content, record.type, record.title);
 
-    // 4. Call Gemini
-    const result = await generateAiSummary(content, record.type, record.title);
-
-    // 5. Persist the summary — atomic update so concurrent calls can't double-write
     const updated = await MedicalRecord.findOneAndUpdate(
-      { _id: recordId, aiSummary: null }, // only update if still null
-      {
-        $set: {
-          aiSummary: result.formatted,
-          summaryGeneratedAt: new Date(),
-        },
-      },
+      { _id: recordId, aiSummary: null },
+      { $set: { aiSummary: result.formatted, summaryGeneratedAt: new Date() } },
       { new: true }
     );
 
-    // If another request beat us to it (race condition), return whatever is in DB
     const finalSummary = updated?.aiSummary ?? record.aiSummary;
     const finalDate    = updated?.summaryGeneratedAt ?? record.summaryGeneratedAt;
 
-    res.json({
-      success: true,
-      alreadyExists: !updated,
-      aiSummary: finalSummary,
-      summaryGeneratedAt: finalDate,
-    });
+    res.json({ success: true, alreadyExists: !updated, aiSummary: finalSummary, summaryGeneratedAt: finalDate });
   } catch (error: any) {
     console.error('[AI Summarizer] Error:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'AI summarization failed. Please try again.',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'AI summarization failed.', error: error.message });
   }
 };
 
 /**
  * GET /api/medical-records/patient/:patientId
- *
- * Returns all medical records for a patient (includes aiSummary field).
- * Used by patient dashboard to check which records already have a summary.
+ * Returns all medical records for a patient, sorted by date DESC.
+ * Optional query param ?recordType=prescription|report to filter by section.
  */
 export const getPatientRecords = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.params;
-    const records = await MedicalRecord.find({ patientId }).sort({ date: -1 });
+    const { recordType } = req.query;
+
+    const filter: Record<string, any> = { patientId };
+    if (recordType === 'prescription' || recordType === 'report') {
+      filter.recordType = recordType;
+    }
+
+    const records = await MedicalRecord.find(filter).sort({ date: -1, createdAt: -1 });
     res.json({ success: true, records });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch records.', error: error.message });
+  }
+};
+
+/**
+ * POST /api/medical-records/patient-upload
+ * Patient uploads their own historical record (PDF or image).
+ * Body fields: patientId, recordDate, title, recordType ("prescription" | "report")
+ * File via multipart field name "file".
+ */
+export const uploadOwnRecord = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId, recordDate, title, recordType } = req.body;
+
+    if (!patientId) {
+      res.status(400).json({ success: false, message: 'patientId is required.' });
+      return;
+    }
+
+    const file = (req as any).file as Express.Multer.File | undefined;
+    const fileUrl = file ? `http://localhost:5000/uploads/${file.filename}` : undefined;
+
+    const originalName = file ? file.originalname : 'Unknown file';
+    const ext          = file ? path.extname(file.originalname).toLowerCase() : '';
+    const isImage      = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+
+    // recordType from body overrides auto-detection
+    const resolvedRecordType: 'prescription' | 'report' =
+      recordType === 'prescription' ? 'prescription' : 'report';
+
+    // Map to legacy fine-grained type
+    const legacyType = resolvedRecordType === 'prescription'
+      ? 'prescription'
+      : isImage ? 'xray' : 'lab_report';
+
+    const record = new MedicalRecord({
+      patientId,
+      type:       legacyType,
+      recordType: resolvedRecordType,
+      title:      title || originalName,
+      description:`Patient-uploaded record${title ? ': ' + title : ''}. File: ${originalName}`,
+      date:       recordDate ? new Date(recordDate) : new Date(),
+      attachments:fileUrl ? [fileUrl] : [],
+      aiSummary:  null,
+    });
+    await record.save();
+
+    res.status(201).json({ success: true, record });
+  } catch (error: any) {
+    console.error('[MedicalRecord] uploadOwnRecord error:', error.message);
+    res.status(500).json({ success: false, message: 'Upload failed.', error: error.message });
+  }
+};
+
+/**
+ * DELETE /api/medical-records/:recordId
+ * Permanently deletes a single record by its MongoDB _id.
+ */
+export const deleteRecord = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { recordId } = req.params;
+    const deleted = await MedicalRecord.findByIdAndDelete(recordId);
+    if (!deleted) {
+      res.status(404).json({ success: false, message: 'Record not found.' });
+      return;
+    }
+    res.json({ success: true, message: 'Record permanently deleted.' });
+  } catch (error: any) {
+    console.error('[MedicalRecord] deleteRecord error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to delete record.', error: error.message });
+  }
+};
+
+/**
+ * DELETE /api/medical-records/bulk
+ * Permanently deletes multiple records.
+ * Body: { ids: string[] }
+ */
+export const bulkDeleteRecords = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ success: false, message: 'ids must be a non-empty array.' });
+      return;
+    }
+
+    const result = await MedicalRecord.deleteMany({ _id: { $in: ids } });
+    res.json({ success: true, deletedCount: result.deletedCount, message: `${result.deletedCount} record(s) permanently deleted.` });
+  } catch (error: any) {
+    console.error('[MedicalRecord] bulkDeleteRecords error:', error.message);
+    res.status(500).json({ success: false, message: 'Bulk delete failed.', error: error.message });
   }
 };

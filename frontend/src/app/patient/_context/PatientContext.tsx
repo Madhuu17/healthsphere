@@ -261,7 +261,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
         const tl = data.timeline?.length ? data.timeline : [];
         setTimeline(tl);
 
-        // Merge AI summaries from medical records
+        // Merge AI summaries + recordType from medical records (enables Prescriptions/Reports tabs)
         if (patientId) {
           fetch(`${API}/api/medical-records/patient/${patientId}`)
             .then(r => r.json())
@@ -269,7 +269,9 @@ export function PatientProvider({ children }: { children: ReactNode }) {
               if (rec.success && rec.records?.length) {
                 setTimeline((prev: any[]) => prev.map(item => {
                   const match = rec.records.find((r: any) => r._id === item._id || r._id?.toString() === item._id?.toString());
-                  return match ? { ...item, aiSummary: match.aiSummary, summaryGeneratedAt: match.summaryGeneratedAt } : item;
+                  return match
+                    ? { ...item, aiSummary: match.aiSummary, summaryGeneratedAt: match.summaryGeneratedAt, recordType: match.recordType }
+                    : item;
                 }));
               }
             })
