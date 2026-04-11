@@ -2,9 +2,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Pill, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
-  Calendar, User, Stethoscope, Timer, History, Activity, Info,
-  Filter
+  Pill, CheckCircle2, AlertCircle, ChevronDown, ChevronUp,
+  Stethoscope, Timer, History, Activity, Info, Clock, Calendar
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -25,27 +24,37 @@ interface Medicine {
   prescriptionId: string;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 function formatDate(d: string | Date) {
   if (!d) return "—";
   const date = new Date(d);
   if (isNaN(date.getTime())) return String(d);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${String(date.getDate()).padStart(2,"0")}-${String(date.getMonth()+1).padStart(2,"0")}-${date.getFullYear()}`;
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  tablet: "💊", syrup: "🧪", capsule: "💉", injection: "💉",
-  drops: "💧", ointment: "🧴", other: "🩺",
+  tablet:"💊", syrup:"🧪", capsule:"💊", injection:"💉",
+  drops:"💧", ointment:"🧴", other:"🩺",
 };
+
+/** Normalize a raw frequency string to a human readable "X a day" label */
+function formatFrequency(freq: string): string {
+  if (!freq) return "—";
+  const f = freq.toLowerCase().trim();
+  if (f.includes("once") || f === "1" || f.includes("1x") || f.includes("od") || f.includes("daily"))
+    return "Once a day";
+  if (f.includes("twice") || f === "2" || f.includes("2x") || f.includes("bd") || f.includes("bid"))
+    return "Twice a day";
+  if (f.includes("thrice") || f === "3" || f.includes("3x") || f.includes("td") || f.includes("tid"))
+    return "Thrice a day";
+  // Return as-is if we can't normalize
+  return freq;
+}
 
 function DaysLeftBadge({ daysLeft }: { daysLeft: number }) {
   const color =
-    daysLeft <= 1  ? "bg-red-100 text-red-700 border-red-200" :
-    daysLeft <= 3  ? "bg-orange-100 text-orange-700 border-orange-200" :
-    daysLeft <= 7  ? "bg-amber-100 text-amber-700 border-amber-200" :
+    daysLeft <= 1 ? "bg-red-100 text-red-700 border-red-200" :
+    daysLeft <= 3 ? "bg-orange-100 text-orange-700 border-orange-200" :
+    daysLeft <= 7 ? "bg-amber-100 text-amber-700 border-amber-200" :
                     "bg-teal-100 text-teal-700 border-teal-200";
   const label = daysLeft === 0 ? "Expires today" : daysLeft === 1 ? "1 day left" : `${daysLeft} days left`;
   return (
@@ -58,17 +67,15 @@ function DaysLeftBadge({ daysLeft }: { daysLeft: number }) {
 // ══════════════════════════════════════════════════════════════════════════
 // Main Component
 // ══════════════════════════════════════════════════════════════════════════
-interface MedicationsTabProps {
-  profile: any;
-}
+interface MedicationsTabProps { profile: any; }
 
 export default function MedicationsTab({ profile }: MedicationsTabProps) {
-  const [activeMeds, setActiveMeds]   = useState<Medicine[]>([]);
-  const [pastMeds,   setPastMeds]     = useState<Medicine[]>([]);
-  const [loading,    setLoading]      = useState(true);
-  const [error,      setError]        = useState("");
-  const [section,    setSection]      = useState<"active" | "past">("active");
-  const [expanded,   setExpanded]     = useState<string | null>(null);
+  const [activeMeds, setActiveMeds] = useState<Medicine[]>([]);
+  const [pastMeds,   setPastMeds]   = useState<Medicine[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState("");
+  const [section,    setSection]    = useState<"active" | "past">("active");
+  const [expanded,   setExpanded]   = useState<string | null>(null);
 
   useEffect(() => {
     const patientId = profile?.patientId || profile?.id;
@@ -79,14 +86,14 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
   const loadMedications = async (patientId: string) => {
     setLoading(true); setError("");
     try {
-      const [activeRes, pastRes] = await Promise.all([
+      const [aRes, pRes] = await Promise.all([
         fetch(`http://localhost:5000/api/prescriptions/${patientId}/active`),
         fetch(`http://localhost:5000/api/prescriptions/${patientId}/past`),
       ]);
-      const activeData = await activeRes.json();
-      const pastData   = await pastRes.json();
-      if (activeData.success) setActiveMeds(activeData.medications || []);
-      if (pastData.success)   setPastMeds(pastData.medications || []);
+      const aData = await aRes.json();
+      const pData = await pRes.json();
+      if (aData.success) setActiveMeds(aData.medications || []);
+      if (pData.success) setPastMeds(pData.medications || []);
     } catch {
       setError("Failed to load medications. Please refresh.");
     } finally {
@@ -94,17 +101,14 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
     }
   };
 
-  const displayList = section === "active" ? activeMeds : pastMeds;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
+      <p className="text-slate-500 font-medium">Loading your medications...</p>
+    </div>
+  );
 
-  // ── Loading ──────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-500 font-medium">Loading your medications...</p>
-      </div>
-    );
-  }
+  const displayList = section === "active" ? activeMeds : pastMeds;
 
   return (
     <div className="max-w-[1100px] space-y-6">
@@ -119,10 +123,9 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
         <div className="flex-1 relative z-10">
           <h2 className="text-2xl font-black text-white">My Medications</h2>
           <p className="text-purple-100 text-sm mt-1">
-            Track your active prescriptions and view your complete medication history. Status updates automatically based on prescription duration.
+            Active prescriptions update automatically. Tap "View Details" for more info on any medicine.
           </p>
         </div>
-        {/* Summary chips */}
         <div className="flex gap-3 shrink-0">
           <div className="bg-white/20 backdrop-blur-sm rounded-2xl px-5 py-3 text-center border border-white/20">
             <p className="text-white text-2xl font-black">{activeMeds.length}</p>
@@ -145,13 +148,9 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
 
       {/* ── Section Tabs ── */}
       <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit">
-        <button
-          onClick={() => setSection("active")}
+        <button onClick={() => setSection("active")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-            section === "active"
-              ? "bg-white text-teal-700 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}>
+            section === "active" ? "bg-white text-teal-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
           <Activity size={16} />
           Active Medications
           {activeMeds.length > 0 && (
@@ -160,13 +159,9 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
             </span>
           )}
         </button>
-        <button
-          onClick={() => setSection("past")}
+        <button onClick={() => setSection("past")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-            section === "past"
-              ? "bg-white text-slate-700 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}>
+            section === "past" ? "bg-white text-slate-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
           <History size={16} />
           Past Medications
           {pastMeds.length > 0 && (
@@ -178,25 +173,21 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
       </div>
 
       {/* ── Section Header ── */}
-      {section === "active" ? (
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-8 bg-teal-500 rounded-full" />
-          <div>
-            <h3 className="font-black text-slate-800 text-lg">Active Medications</h3>
-            <p className="text-slate-500 text-xs">Currently prescribed medicines — auto-expire when duration ends</p>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className={`w-2 h-8 rounded-full ${section === "active" ? "bg-teal-500" : "bg-slate-400"}`} />
+        <div>
+          <h3 className="font-black text-slate-800 text-lg">
+            {section === "active" ? "Active Medications" : "Past Medications"}
+          </h3>
+          <p className="text-slate-500 text-xs">
+            {section === "active"
+              ? "Currently prescribed — auto-expire when duration ends"
+              : "Complete medication history — permanently stored"}
+          </p>
         </div>
-      ) : (
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-8 bg-slate-400 rounded-full" />
-          <div>
-            <h3 className="font-black text-slate-800 text-lg">Past Medications</h3>
-            <p className="text-slate-500 text-xs">Complete medication history — permanently stored, never deleted</p>
-          </div>
-        </div>
-      )}
+      </div>
 
-      {/* ── Medication List ── */}
+      {/* ── Medication Cards ── */}
       <AnimatePresence mode="wait">
         {displayList.length === 0 ? (
           <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -206,7 +197,7 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
                 <Pill size={40} className="text-slate-200" />
                 <p className="text-slate-500 font-bold">No active medications</p>
                 <p className="text-slate-400 text-sm text-center max-w-xs">
-                  Your doctor will add prescriptions here after your appointment. They'll appear automatically with duration tracking.
+                  Your doctor will add prescriptions here after your appointment.
                 </p>
               </>
             ) : (
@@ -214,7 +205,7 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
                 <History size={40} className="text-slate-200" />
                 <p className="text-slate-500 font-bold">No past medications yet</p>
                 <p className="text-slate-400 text-sm text-center max-w-xs">
-                  Completed medications will appear here permanently as your prescription history.
+                  Completed medications appear here permanently.
                 </p>
               </>
             )}
@@ -223,8 +214,10 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
           <motion.div key={section} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayList.map((med, idx) => {
-              const isExpanded = expanded === med._id;
+              const isDetailsOpen = expanded === med._id;
               const isActive = med.status === "active";
+              const freqLabel = formatFrequency(med.frequency);
+
               return (
                 <motion.div
                   key={med._id || idx}
@@ -232,80 +225,117 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.04 }}
                   className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all overflow-hidden ${
-                    isActive
-                      ? "border-teal-100 hover:border-teal-200"
-                      : "border-slate-100 opacity-85 hover:opacity-100"
-                  }`}>
-
+                    isActive ? "border-teal-100 hover:border-teal-200" : "border-slate-100 opacity-85 hover:opacity-100"
+                  }`}
+                >
                   {/* Colored top strip */}
-                  <div className={`h-1 w-full ${isActive ? "bg-gradient-to-r from-teal-400 to-emerald-500" : "bg-gradient-to-r from-slate-300 to-slate-400"}`} />
+                  <div className={`h-1.5 w-full ${isActive
+                    ? "bg-gradient-to-r from-teal-400 to-emerald-500"
+                    : "bg-gradient-to-r from-slate-300 to-slate-400"}`} />
 
                   <div className="p-5">
-                    {/* Header row */}
-                    <div className="flex items-start justify-between gap-3 mb-3">
+                    {/* ── ROW 1: Icon + Name + Status badge (top-right ONLY) ── */}
+                    <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 ${
                           isActive ? "bg-teal-50" : "bg-slate-100"
                         }`}>
                           {TYPE_ICONS[med.type] || "💊"}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-black text-slate-800 truncate">{med.medicineName}</h4>
-                          <p className="text-xs text-slate-500 font-medium capitalize mt-0.5">{med.type} · {med.dosage}</p>
+                          <h4 className="font-black text-slate-800 text-base leading-tight truncate">{med.medicineName}</h4>
+                          <p className="text-sm font-semibold text-slate-500 capitalize mt-0.5">{med.dosage}</p>
                         </div>
                       </div>
+
+                      {/* ── Status badge — shown ONCE here at top-right ── */}
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         {isActive ? (
                           <>
-                            <span className="bg-teal-100 text-teal-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            <span className="bg-teal-100 text-teal-700 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
                               ● Active
                             </span>
                             {med.daysLeft !== undefined && <DaysLeftBadge daysLeft={med.daysLeft} />}
                           </>
                         ) : (
-                          <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
                             <CheckCircle2 size={10} /> Completed
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Key info row */}
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      <InfoChip icon={<Clock size={11} />} label="Frequency" value={med.frequency} />
-                      <InfoChip icon={<Calendar size={11} />} label="Duration" value={`${med.durationDays} day${med.durationDays !== 1 ? "s" : ""}`} />
-                      <InfoChip icon={<Calendar size={11} />} label="Started" value={formatDate(med.prescribedDate)} />
-                      <InfoChip icon={<Calendar size={11} />} label="Ends" value={formatDate(med.endDate)} />
-                    </div>
-
-                    {/* Doctor & prescription */}
-                    <div className="flex items-center gap-2 mb-3 bg-slate-50 rounded-xl p-2.5">
-                      <Stethoscope size={13} className="text-slate-400 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-700 truncate">{med.doctorName}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{med.prescriptionTitle}</p>
+                    {/* ── ROW 2: Days Left + Frequency (replaces duplicate Status) ── */}
+                    <div className="grid grid-cols-2 gap-2.5 mb-3">
+                      {/* Days Left / Duration */}
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                        <p className="text-[10px] text-slate-400 font-semibold mb-0.5 uppercase tracking-wide">
+                          {isActive ? "Days Left" : "Duration"}
+                        </p>
+                        <p className="text-sm font-black text-slate-700">
+                          {isActive
+                            ? (med.daysLeft !== undefined ? `${med.daysLeft} day${med.daysLeft !== 1 ? "s" : ""}` : "—")
+                            : `${med.durationDays} day${med.durationDays !== 1 ? "s" : ""}`}
+                        </p>
+                      </div>
+                      {/* Frequency — now visible in main card */}
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                        <p className="text-[10px] text-slate-400 font-semibold mb-0.5 uppercase tracking-wide">Frequency</p>
+                        <p className="text-sm font-black text-slate-700 flex items-center gap-1">
+                          <Clock size={12} className="text-teal-400 shrink-0" />
+                          {freqLabel}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Expand toggle */}
-                    {med.instructions && (
-                      <button
-                        onClick={() => setExpanded(isExpanded ? null : med._id)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors text-xs font-bold text-slate-600">
-                        <span className="flex items-center gap-1.5"><Info size={12} /> Instructions</span>
-                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                    )}
+                    {/* ── Dosage info line ── */}
+                    <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100 mb-3">
+                      <Pill size={13} className="text-slate-400 shrink-0" />
+                      <span className="font-medium capitalize">{med.type}</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="font-bold text-slate-700">{med.dosage}</span>
+                    </div>
 
+                    {/* ── "View Details" toggle ── */}
+                    <button
+                      onClick={() => setExpanded(isDetailsOpen ? null : med._id)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 hover:from-teal-50 hover:to-emerald-50 hover:border-teal-200 border border-slate-100 transition-all text-xs font-bold text-slate-600 hover:text-teal-700"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Info size={13} />
+                        {isDetailsOpen ? "Hide Details" : "View Details"}
+                      </span>
+                      {isDetailsOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                    </button>
+
+                    {/* ── Collapsible detail section (Frequency removed — now shown above) ── */}
                     <AnimatePresence>
-                      {isExpanded && med.instructions && (
+                      {isDetailsOpen && (
                         <motion.div
                           initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                          animate={{ opacity: 1, height: "auto", marginTop: 8 }}
+                          animate={{ opacity: 1, height: "auto", marginTop: 10 }}
                           exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                          className="overflow-hidden">
-                          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                            <p className="text-xs text-blue-800 font-medium leading-relaxed">{med.instructions}</p>
+                          className="overflow-hidden"
+                        >
+                          <div className="space-y-2.5 pt-1">
+                            {/* Duration */}
+                            <DetailRow icon={<Timer size={13} />} label="Duration" value={`${med.durationDays} day${med.durationDays !== 1 ? "s" : ""}`} />
+                            {/* Prescribed Doctor */}
+                            <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                              <Stethoscope size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black text-blue-500 uppercase tracking-wider mb-0.5">Prescribed by</p>
+                                <p className="text-xs font-bold text-slate-700 truncate">{med.doctorName}</p>
+                                <p className="text-[10px] text-slate-400 truncate">{med.prescriptionTitle}</p>
+                              </div>
+                            </div>
+                            {/* Instructions */}
+                            {med.instructions && (
+                              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                                <p className="text-[10px] font-black text-amber-500 uppercase tracking-wider mb-1">Instructions</p>
+                                <p className="text-xs text-amber-800 font-medium leading-relaxed">{med.instructions}</p>
+                              </div>
+                            )}
                           </div>
                         </motion.div>
                       )}
@@ -318,27 +348,27 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
         )}
       </AnimatePresence>
 
-      {/* ── Info Note ── */}
+      {/* ── How it works ── */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3">
         <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
         <div className="text-xs text-blue-700 leading-relaxed">
-          <strong>How it works:</strong> Medications are automatically moved from Active to Past when their prescribed duration ends.
-          Past medications are <strong>permanently preserved</strong> as your medical history and can never be deleted.
-          The status updates daily (and immediately when you load this page).
+          <strong>How it works:</strong> Active medications automatically move to Past when their duration ends.
+          Daily dose reminders are sent as in-app notifications based on frequency (once/twice/thrice daily).
+          All completed medications are <strong>permanently preserved</strong> as history.
         </div>
       </div>
     </div>
   );
 }
 
-// ── Sub-component ──────────────────────────────────────────────────────────
-function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+// ── Small sub-component ────────────────────────────────────────────────────
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
-      <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold mb-0.5">
+    <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
+      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold uppercase tracking-wide">
         {icon} {label}
       </div>
-      <p className="text-xs font-bold text-slate-700 truncate">{value}</p>
+      <p className="text-xs font-bold text-slate-700">{value}</p>
     </div>
   );
 }
