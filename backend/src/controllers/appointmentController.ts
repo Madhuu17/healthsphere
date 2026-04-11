@@ -5,7 +5,7 @@ import MedicalRecord from '../models/MedicalRecord';
 
 export const createAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { patientId, patientName, doctorId, doctorName, hospital, date, timeSlot } = req.body;
+    const { patientId, patientName, doctorId, doctorName, hospital, date, timeSlot, severityScore } = req.body;
 
     if (!patientId || !patientName || !doctorId || !doctorName || !hospital || !date || !timeSlot) {
       res.status(400).json({ success: false, message: 'All fields are required' });
@@ -22,6 +22,8 @@ export const createAppointment = async (req: Request, res: Response): Promise<vo
       date,
       timeSlot,
       status: 'scheduled',
+      severityScore: severityScore ?? null,
+      isPriority: false,
     });
 
     res.status(201).json({ success: true, data: appointment });
@@ -109,5 +111,39 @@ export const updateAppointmentStatus = async (req: Request, res: Response): Prom
   } catch (error: any) {
     console.error('[Appointment] updateAppointmentStatus error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to update appointment', error: error.message });
+  }
+};
+
+// POST /api/appointments/:id/prioritize
+export const prioritizeAppointment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const appointment = await Appointment.findOneAndUpdate(
+      { appointmentId: id },
+      { isPriority: true },
+      { new: true }
+    );
+
+    if (!appointment) {
+      res.status(404).json({ success: false, message: 'Appointment not found' });
+      return;
+    }
+
+    // Create a notification for the patient (matches Notification schema)
+    const Notification = (await import('../models/Notification')).default;
+    await Notification.create({
+      patientId: appointment.patientId,
+      type:      'appointment',
+      text:      'The doctor is available now. Please come immediately.',
+      date:      new Date().toISOString().split('T')[0],
+      isRead:    false,
+    });
+
+    console.log(`[Priority] Appointment ${id} prioritised; notification sent to ${appointment.patientId}`);
+    res.status(200).json({ success: true, data: appointment });
+  } catch (error: any) {
+    console.error('[Appointment] prioritizeAppointment error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to prioritize appointment', error: error.message });
   }
 };
