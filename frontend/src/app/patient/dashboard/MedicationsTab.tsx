@@ -471,7 +471,6 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
             {displayList.map((med, idx) => {
               const isDetailsOpen = expanded === med._id;
               const isActive      = med.status === "active";
-              const freqLabel     = formatFrequency(med.frequency);
               const isGlowing     = glowingIds.has(med._id);
               const savedTimes    = reminderTimes[med.medicineName] || [];
               const hasReminder   = savedTimes.length > 0;
@@ -526,7 +525,6 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
                                 ● Active
                               </span>
                             )}
-                            {med.daysLeft !== undefined && <DaysLeftBadge daysLeft={med.daysLeft} />}
                           </>
                         ) : (
                           <span className="flex items-center gap-1 bg-slate-100 text-slate-500 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
@@ -558,34 +556,7 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
                       </motion.div>
                     )}
 
-                    {/* ROW 2: Days Left + Frequency */}
-                    <div className="grid grid-cols-2 gap-2.5 mb-3">
-                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                        <p className="text-[10px] text-slate-400 font-semibold mb-0.5 uppercase tracking-wide">
-                          {isActive ? "Days Left" : "Duration"}
-                        </p>
-                        <p className="text-sm font-black text-slate-700">
-                          {isActive
-                            ? (med.daysLeft !== undefined ? `${med.daysLeft} day${med.daysLeft !== 1 ? "s" : ""}` : "—")
-                            : `${med.durationDays} day${med.durationDays !== 1 ? "s" : ""}`}
-                        </p>
-                      </div>
-                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                        <p className="text-[10px] text-slate-400 font-semibold mb-0.5 uppercase tracking-wide">Frequency</p>
-                        <p className="text-sm font-black text-slate-700 flex items-center gap-1">
-                          <Clock size={12} className="text-teal-400 shrink-0" />
-                          {freqLabel}
-                        </p>
-                      </div>
-                    </div>
 
-                    {/* Dosage info line */}
-                    <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100 mb-3">
-                      <Pill size={13} className="text-slate-400 shrink-0" />
-                      <span className="font-medium capitalize">{med.type}</span>
-                      <span className="text-slate-300">·</span>
-                      <span className="font-bold text-slate-700">{med.dosage}</span>
-                    </div>
 
                     {/* Reminder times display (if set) */}
                     {hasReminder && (
@@ -635,7 +606,6 @@ export default function MedicationsTab({ profile }: MedicationsTabProps) {
                           className="overflow-hidden"
                         >
                           <div className="space-y-2.5 pt-1">
-                            <DetailRow icon={<Timer size={13} />} label="Duration" value={`${med.durationDays} day${med.durationDays !== 1 ? "s" : ""}`} />
                             <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3">
                               <Stethoscope size={14} className="text-blue-400 shrink-0 mt-0.5" />
                               <div className="min-w-0">
