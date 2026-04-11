@@ -4,6 +4,7 @@ import {
   getAppointments,
   getPatientAppointments,
   updateAppointmentStatus,
+  prioritizeAppointment,
 } from '../controllers/appointmentController';
 
 const router = Router();
@@ -19,5 +20,8 @@ router.get('/patient/:patientId', getPatientAppointments);
 
 // PATCH /api/appointments/:id/status
 router.patch('/:id/status', updateAppointmentStatus);
+
+// PATCH /api/appointments/:id/prioritize
+router.patch('/:id/prioritize', prioritizeAppointment);
 
 export default router;
