@@ -137,21 +137,6 @@ cd frontend && npm run dev
 
 ---
 
-## Screenshots
-
-> Screenshots will be added here.
-
-[Landing Page](image.png)
-[Patient Dashboard](image-1.png)
-[AI Symptom Checker](image-2.png)
-[AI Diet Planner1](image-3.png), [AI Diet Planner2](image-4.png), [AI Diet Planner3](image-5.png)
-[Doctor Dashboard](image-6.png)
-[Appointment Booking](image-7.png)
-[Medical Timeline](image-8.png)
-[Memory Insights](image-9.png)
-
----
-
 ## Future Improvements
 
 - [ ] **Real-time Chat** — WebSocket-based live messaging between patients and doctors
