@@ -88,6 +88,7 @@ interface PatientContextType {
   setSlot: (s: any) => void;
   scheduled: number[];
   setScheduled: (s: any) => void;
+  scheduledPast: number[];
   liveDoctors: any[];
   selectedDoc: any;
   setSelectedDoc: (d: any) => void;
@@ -148,6 +149,8 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [showMessages, setShowMessages] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
+  const [pastAppointments, setPastAppointments] = useState<any[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
@@ -169,6 +172,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const [doctor, setDoctor] = useState("");
   const [slot, setSlot] = useState<{label:string;day:number}|null>(null);
   const [scheduled, setScheduled] = useState<number[]>([]);
+  const [scheduledPast, setScheduledPast] = useState<number[]>([]);
   const [liveDoctors, setLiveDoctors] = useState<any[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [apptDate, setApptDate] = useState("");
@@ -193,46 +197,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
   const [editProfilePicture, setEditProfilePicture] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
-  // ── Helper: parse "09:00 AM" → minutes since midnight ──
-  function slotToMinutes(slot: string): number {
-    const m = (slot || "").match(/(\d+):(\d+)\s*(AM|PM)/i);
-    if (!m) return 0;
-    let h = parseInt(m[1]);
-    const min = parseInt(m[2]);
-    if (m[3].toUpperCase() === "PM" && h !== 12) h += 12;
-    if (m[3].toUpperCase() === "AM" && h === 12) h = 0;
-    return h * 60 + min;
-  }
-
-  const nowMs    = Date.now();
-  const todayYMD = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
-  const today    = new Date(); today.setHours(0, 0, 0, 0); // kept for context consumers
-
-  // Upcoming = status=scheduled AND (date in future OR (date=today AND timeSlot hasn't passed yet))
-  const upcomingAppointments = appointments.filter((a: any) => {
-    if (a.status === "completed" || a.status === "cancelled") return false;
-    const apptDate = a.date; // "YYYY-MM-DD"
-    if (!apptDate) return false;
-    if (apptDate > todayYMD) return true;  // future date
-    if (apptDate < todayYMD) return false; // past date
-    // Same day — check time
-    const nowMinutes  = new Date().getHours() * 60 + new Date().getMinutes();
-    const slotMinutes = slotToMinutes(a.timeSlot);
-    return slotMinutes > nowMinutes; // only show if slot hasn't passed yet
-  });
-
-  // Past = completed/cancelled OR date+time already elapsed
-  const pastAppointments = appointments.filter((a: any) => {
-    if (a.status === "completed" || a.status === "cancelled") return true;
-    const apptDate = a.date;
-    if (!apptDate) return false;
-    if (apptDate < todayYMD) return true;  // past date
-    if (apptDate > todayYMD) return false; // future date
-    // Same day — slot has passed
-    const nowMinutes  = new Date().getHours() * 60 + new Date().getMinutes();
-    const slotMinutes = slotToMinutes(a.timeSlot);
-    return slotMinutes <= nowMinutes;
-  });
+  const today = new Date(); today.setHours(0, 0, 0, 0); // kept for context consumers
 
 
   // ── AI Summarize handler ──
@@ -306,9 +271,9 @@ export function PatientProvider({ children }: { children: ReactNode }) {
             .catch(() => {});
         }
 
-        if (data.appointments?.length) {
-          setScheduled(data.appointments.map((a: any) => new Date(a.date).getDate()));
-        }
+        // NOTE: Do NOT set scheduled/scheduledPast here using date-only comparison.
+        // The dedicated appointment endpoint below handles calendar dots with full
+        // datetime comparison (date + timeSlot) for accurate past vs upcoming.
 
         // Messages from notifications
         fetch(`${API}/api/notifications/${patientId}`)
@@ -349,9 +314,47 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     fetch(`${API}/api/appointments/patient/${patientId}`)
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) {
-          setAppointments(data);
-          setScheduled(data.map((a: any) => new Date(a.date).getDate()));
+        if (data.success) {
+          const upcoming = data.upcomingAppointments || [];
+          const past     = data.pastAppointments     || [];
+          setUpcomingAppointments(upcoming);
+          setPastAppointments(past);
+          setAppointments([...upcoming, ...past]);
+
+          // Calendar: use full datetime (date + timeSlot) for accurate past vs upcoming
+          // e.g. now = 6 PM, appt at 2 PM same day → GREY (past); appt at 8 PM → GREEN (upcoming)
+          const now = Date.now();
+          function apptMs(a: any): number {
+            const match = (a.timeSlot || '').match(/(\d+):(\d+)\s*(AM|PM)/i);
+            let h = 0, m = 0;
+            if (match) {
+              h = parseInt(match[1], 10);
+              m = parseInt(match[2], 10);
+              if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+              if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
+            }
+            return new Date(`${a.date}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`).getTime();
+          }
+          const curMonth = new Date().getMonth();
+          const curYear  = new Date().getFullYear();
+          const inCurMonth = (a: any) => { const d = new Date(a.date); return d.getMonth() === curMonth && d.getFullYear() === curYear; };
+
+          // GREEN dots: only appointments whose full datetime is in the future
+          setScheduled(
+            upcoming
+              .filter((a: any) => apptMs(a) >= now)
+              .filter(inCurMonth)
+              .map((a: any) => new Date(a.date).getDate())
+          );
+          // GREY dots: completed/cancelled appointments + upcoming appointments whose time has passed
+          const pastDays = past
+            .filter(inCurMonth)
+            .map((a: any) => new Date(a.date).getDate());
+          const upcomingPastTimeDays = upcoming
+            .filter((a: any) => apptMs(a) < now)
+            .filter(inCurMonth)
+            .map((a: any) => new Date(a.date).getDate());
+          setScheduledPast([...new Set([...pastDays, ...upcomingPastTimeDays])]);
         }
       })
       .catch(() => {})
@@ -409,9 +412,37 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       // Re-fetch appointments from DB to ensure persistence
       const apptRes = await fetch(`${API}/api/appointments/patient/${user.id}`);
       const apptData = await apptRes.json();
-      if (Array.isArray(apptData)) {
-        setAppointments(apptData);
-        setScheduled(apptData.map((a: any) => new Date(a.date).getDate()));
+      if (apptData.success) {
+        const upcoming = apptData.upcomingAppointments || [];
+        const past     = apptData.pastAppointments     || [];
+        setUpcomingAppointments(upcoming);
+        setPastAppointments(past);
+        setAppointments([...upcoming, ...past]);
+        const now2 = Date.now();
+        function apptMs2(a: any): number {
+          const match = (a.timeSlot || '').match(/(\d+):(\d+)\s*(AM|PM)/i);
+          let h = 0, m = 0;
+          if (match) {
+            h = parseInt(match[1], 10);
+            m = parseInt(match[2], 10);
+            if (match[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+            if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
+          }
+          return new Date(`${a.date}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`).getTime();
+        }
+        const cm = new Date().getMonth(), cy = new Date().getFullYear();
+        const inCM = (a: any) => { const d = new Date(a.date); return d.getMonth() === cm && d.getFullYear() === cy; };
+        // GREEN dots: only future-time appointments
+        setScheduled(
+          upcoming
+            .filter((a: any) => apptMs2(a) >= now2)
+            .filter(inCM)
+            .map((a: any) => new Date(a.date).getDate())
+        );
+        // GREY dots: completed/cancelled + past-time upcoming
+        const pastD = past.filter(inCM).map((a: any) => new Date(a.date).getDate());
+        const upPastD = upcoming.filter((a: any) => apptMs2(a) < now2).filter(inCM).map((a: any) => new Date(a.date).getDate());
+        setScheduledPast([...new Set([...pastD, ...upPastD])]);
       }
 
       setMessages((prev: any[]) => [{ id: Date.now(), type:"appointment", text:`Appointment booked with ${selectedDoc.name} on ${formatDate(apptDate)} at ${selectedSlot}`, date:"Just Now", isNew:true }, ...prev]);
@@ -447,7 +478,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       summarizingId, summaryError, setSummaryError,
       expandedSummary, setExpandedSummary, handleSummarize,
       apptStep, setApptStep, city, setCity, hospital, setHospital,
-      doctor, setDoctor, slot, setSlot, scheduled, setScheduled,
+      doctor, setDoctor, slot, setSlot, scheduled, setScheduled, scheduledPast,
       liveDoctors, selectedDoc, setSelectedDoc, apptDate, setApptDate,
       availableSlots, setAvailableSlots, selectedSlot, setSelectedSlot,
       bookingLoading, bookingError, setBookingError, slotLoading,

@@ -5,6 +5,20 @@ import MedicalRecord from '../models/MedicalRecord';
 import Prescription from '../models/Prescription';
 import { storeAppointment } from '../utils/memoryService';
 
+// ── Helper: is appointment date+time in the past? ─────────────────────────
+function isInPast(date: string, timeSlot: string): boolean {
+  const match = (timeSlot || '').match(/(\d+):(\d+)\s*(AM|PM)/i);
+  let hours = 0, mins = 0;
+  if (match) {
+    hours = parseInt(match[1], 10);
+    mins  = parseInt(match[2], 10);
+    if (match[3].toUpperCase() === 'PM' && hours !== 12) hours += 12;
+    if (match[3].toUpperCase() === 'AM' && hours === 12) hours  = 0;
+  }
+  const apptMs = new Date(`${date}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00`).getTime();
+  return apptMs < Date.now();
+}
+
 // ── Helper: parse "09:00 AM" → minutes since midnight for sorting ──────────
 function timeSlotToMinutes(slot: string): number {
   if (!slot) return 0;
@@ -76,8 +90,37 @@ export const getAppointments = async (req: Request, res: Response): Promise<void
 export const getPatientAppointments = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.params;
-    const raw = await Appointment.find({ patientId }).sort({ date: 1 }).lean();
-    res.status(200).json(sortChrono(raw));
+
+    // Step 1: Auto-complete any past-dated scheduled appointments
+    const pendingPast = await Appointment.find({
+      patientId,
+      status: 'scheduled',
+    }).lean();
+
+    const toComplete = pendingPast
+      .filter((a: any) => isInPast(a.date, a.timeSlot))
+      .map((a: any) => a.appointmentId);
+
+    if (toComplete.length > 0) {
+      await Appointment.updateMany(
+        { appointmentId: { $in: toComplete } },
+        { $set: { status: 'completed' } }
+      );
+      console.log(`[Appointment] Auto-completed ${toComplete.length} past appointment(s) for patient ${patientId}`);
+    }
+
+    // Step 2: Fetch all appointments fresh and split
+    const all = await Appointment.find({ patientId }).sort({ date: 1 }).lean();
+    const sorted = sortChrono(all);
+
+    const upcomingAppointments = sorted
+      .filter((a: any) => a.status !== 'completed' && a.status !== 'cancelled');
+
+    const pastAppointments = [...sorted]
+      .filter((a: any) => a.status === 'completed' || a.status === 'cancelled')
+      .reverse(); // descending: most recent first
+
+    res.status(200).json({ success: true, upcomingAppointments, pastAppointments });
   } catch (error: any) {
     console.error('[Appointment] getPatientAppointments error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to fetch patient appointments' });
@@ -85,51 +128,24 @@ export const getPatientAppointments = async (req: Request, res: Response): Promi
 };
 
 // ── GET /api/appointments/patient/:patientId/timeline ─────────────────────
-// Returns a merged, chronologically sorted view of PAST events only:
-//   - Appointments (completed, cancelled, or past-dated scheduled)
-//   - Medical Records (lab reports, scans, vaccinations, etc.)
+// Returns a merged, chronologically sorted view of records and prescriptions ONLY.
+// Appointments are NOT included — they are served exclusively via getPatientAppointments.
+//   - Medical Records (lab reports, scans, vaccinations, consultation records, etc.)
 //   - Prescriptions (each prescription as a single entry)
 export const getPatientTimeline = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.params;
-    const todayYMD = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
 
-    const [appts, records, prescriptions] = await Promise.all([
-      // Only completed/cancelled, OR past-date scheduled ones
-      Appointment.find({
-        patientId,
-        $or: [
-          { status: { $in: ['completed', 'cancelled'] } },
-          { status: 'scheduled', date: { $lt: todayYMD } },
-        ],
-      }).sort({ date: -1 }).lean(),
+    const [records, prescriptions] = await Promise.all([
       MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
       Prescription.find({ patientId }).sort({ prescribedDate: -1 }).lean(),
     ]);
 
-    // ── 1. Normalise appointments (newest first) ──────────────────────────
-    const apptEntries = sortChrono(appts).reverse().map((a: any) => ({
-      _id:           a._id,
-      entryType:     'appointment',
-      category:      a.status === 'completed' ? 'consultation' : 'appointment',
-      title:         `Appointment with ${a.doctorName}`,
-      doctorName:    a.doctorName,
-      hospital:      a.hospital,
-      date:          a.date,
-      timeSlot:      a.timeSlot,
-      status:        a.status,
-      diagnosis:     a.diagnosis || '',
-      reportUrl:     a.reportUrl || '',
-      appointmentId: a.appointmentId,
-      isPriority:    a.isPriority,
-    }));
-
-    // ── 2. Normalise medical records (lab reports, scans, etc.) ───────────
+    // ── 1. Normalise medical records (lab reports, scans, etc.) ───────────
     const recordEntries = records.map((r: any) => ({
       _id:         r._id,
       entryType:   'record',
-      // Use recordType for prescription records, otherwise use type
-      category:    r.recordType === 'prescription' ? 'prescription' : (r.type || 'consultation'),
+      category:    r.recordType === 'prescription' ? 'prescription' : (r.type || 'report'),
       title:       r.title,
       doctorName:  r.doctorName || '',
       date:        r.date,
@@ -139,16 +155,16 @@ export const getPatientTimeline = async (req: Request, res: Response): Promise<v
       recordType:  r.recordType || 'report',
     }));
 
-    // ── 3. Normalise prescriptions ────────────────────────────────────────
+    // ── 2. Normalise prescriptions ────────────────────────────────────────
     const prescriptionEntries = prescriptions.map((rx: any) => ({
-      _id:               rx._id,
-      entryType:         'prescription',
-      category:          'prescription',
-      title:             rx.prescriptionTitle || 'Prescription',
-      doctorName:        rx.doctorName,
-      date:              rx.prescribedDate,
-      notes:             rx.notes || '',
-      medicines:         (rx.medicines || []).map((m: any) => ({
+      _id:       rx._id,
+      entryType: 'prescription',
+      category:  'prescription',
+      title:     rx.prescriptionTitle || 'Prescription',
+      doctorName: rx.doctorName,
+      date:      rx.prescribedDate,
+      notes:     rx.notes || '',
+      medicines: (rx.medicines || []).map((m: any) => ({
         medicineName: m.medicineName,
         type:         m.type,
         dosage:       m.dosage,
@@ -158,31 +174,14 @@ export const getPatientTimeline = async (req: Request, res: Response): Promise<v
       })),
     }));
 
-    // ── 4. Deduplicate: remove consultation records that duplicate an appointment ──
-    // If a MedicalRecord has an appointmentId that's already in apptEntries, skip it
-    const apptIdSet = new Set(appts.map((a: any) => a.appointmentId).filter(Boolean));
-
-    const dedupedRecordEntries = recordEntries.filter((r: any) => {
-      // If this record was created from an appointment completion, skip it
-      // (the appointment entry already covers it)
-      if (r.category === 'consultation') {
-        // Check by appointmentId field on the raw record
-        const rawRecord = records.find((raw: any) => String(raw._id) === String(r._id));
-        if (rawRecord && (rawRecord as any).appointmentId && apptIdSet.has((rawRecord as any).appointmentId)) {
-          return false; // skip, already shown as appointment
-        }
-      }
-      return true;
-    });
-
-    // ── 5. Merge and sort newest first ────────────────────────────────────
-    const merged = [...apptEntries, ...dedupedRecordEntries, ...prescriptionEntries].sort((a, b) => {
+    // ── 3. Merge records + prescriptions, sort newest first ──────────────
+    const merged = [...recordEntries, ...prescriptionEntries].sort((a, b) => {
       const da = new Date(a.date).getTime();
       const db = new Date(b.date).getTime();
       return db - da;
     });
 
-    // ── 6. Final dedup by _id (safety net) ────────────────────────────────
+    // ── 4. Final dedup by _id (safety net) ───────────────────────────────
     const seen = new Set<string>();
     const unique = merged.filter(item => {
       const key = String(item._id);
@@ -224,33 +223,8 @@ export const updateAppointmentStatus = async (req: Request, res: Response): Prom
       return;
     }
 
-    // Auto-create timeline entry when completed (prevent duplicates via appointmentId)
+    // ── Store in Hindsight memory (only on completion) ──
     if (status === 'completed') {
-      const existingEntry = await MedicalRecord.findOne({
-        appointmentId: appointment.appointmentId,
-      });
-
-      if (!existingEntry) {
-        try {
-          await MedicalRecord.create({
-            patientId:     appointment.patientId,
-            doctorId:      appointment.doctorId,
-            appointmentId: appointment.appointmentId,  // unique key prevents duplicates
-            type:          'consultation',
-            title:         `Consultation with ${appointment.doctorName}`,
-            description:   `${diagnosis ? `Diagnosis: ${diagnosis}. ` : ''}Completed at ${appointment.hospital}. Slot: ${appointment.timeSlot}. Date: ${appointment.date}.`,
-            date:          new Date(appointment.date),
-            attachments:   reportUrl ? [reportUrl] : [],
-          });
-          console.log(`[Timeline] Created timeline entry for completed appointment ${appointment.appointmentId}`);
-        } catch (dupErr: any) {
-          // Catch duplicate key error from the sparse unique index as final safety net
-          if (dupErr.code !== 11000) throw dupErr;
-          console.log(`[Timeline] Duplicate prevented by index for appointment ${appointment.appointmentId}`);
-        }
-      }
-
-      // ── Store in Hindsight memory ──
       storeAppointment(
         appointment.patientId,
         appointment.doctorName,

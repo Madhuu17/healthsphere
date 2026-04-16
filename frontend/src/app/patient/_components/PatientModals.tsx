@@ -21,7 +21,7 @@ export default function PatientModals() {
     apptStep, setApptStep, liveDoctors, selectedDoc, setSelectedDoc,
     apptDate, setApptDate, availableSlots, setAvailableSlots, selectedSlot, setSelectedSlot,
     bookingLoading, bookingError, slotLoading, fetchSlots, confirmAppt, openAppt,
-    scheduled, confirmLogout,
+    scheduled, scheduledPast, confirmLogout,
   } = ctx;
 
   return (
@@ -302,26 +302,46 @@ export default function PatientModals() {
                 {/* Empty cells for offset */}
                 {Array.from({length: firstDayOffset}).map((_,i)=><div key={`e${i}`} />)}
                 {Array.from({length: daysInMonth},(_,i)=>i+1).map(day=>{
-                  const hasAppt = scheduled.includes(day);
-                  const isToday = day === todayDate;
+                  const hasUpcoming = scheduled.includes(day);
+                  const hasPast     = !hasUpcoming && scheduledPast.includes(day);
+                  const isToday     = day === todayDate;
                   return (
-                    <div key={day} className={`relative flex flex-col items-center justify-center h-10 w-full rounded-xl transition-all cursor-default
-                      ${hasAppt ? "bg-teal-500 text-white font-black shadow-sm shadow-teal-400/30"
-                        : isToday ? "bg-slate-900 text-white font-bold ring-2 ring-offset-1 ring-teal-400"
-                        : "hover:bg-slate-50 text-slate-700 font-semibold"}`}>
+                    <div
+                      key={day}
+                      title={
+                        hasUpcoming ? "Upcoming Appointment" :
+                        hasPast     ? "Past Appointment" :
+                        isToday     ? "Today" : undefined
+                      }
+                      className={`relative flex flex-col items-center justify-center h-10 w-full rounded-xl transition-all cursor-default
+                        ${
+                          hasUpcoming ? "bg-teal-500 text-white font-black shadow-sm shadow-teal-400/30"
+                          : hasPast   ? "bg-slate-200 text-slate-400 font-semibold opacity-70"
+                          : isToday   ? "bg-slate-900 text-white font-bold ring-2 ring-offset-1 ring-teal-400"
+                          :             "hover:bg-slate-50 text-slate-700 font-semibold"
+                        }`}
+                    >
                       <span className="text-sm leading-none">{day}</span>
-                      {hasAppt && <span className="absolute -bottom-0.5 w-1.5 h-1.5 rounded-full bg-green-300 ring-2 ring-teal-500"></span>}
+                      {hasUpcoming && <span className="absolute -bottom-0.5 w-1.5 h-1.5 rounded-full bg-green-300 ring-2 ring-teal-500"/>}
+                      {hasPast     && <span className="absolute -bottom-0.5 w-1.5 h-1.5 rounded-full bg-slate-400"/>}
                     </div>
                   );
                 })}
               </div>
-              <div className="flex gap-3 mb-4 text-xs font-semibold text-slate-500">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-900 inline-block"/> Today</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-teal-500 inline-block"/> Appointment</span>
+              <div className="flex flex-wrap gap-3 mb-4 text-xs font-semibold text-slate-500">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-900 inline-block"/>Today</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-teal-500 inline-block"/>Upcoming</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-300 inline-block"/>Past</span>
               </div>
               <div className="bg-teal-50 rounded-2xl p-4 border border-teal-100 flex items-center gap-3">
                 <AlertCircle size={18} className="text-teal-500 shrink-0"/>
-                <p className="text-sm font-medium text-teal-700">You have <span className="font-black">{scheduled.length}</span> appointment(s) this month.</p>
+                <div className="text-sm text-teal-700">
+                  <span className="font-black">{scheduled.length}</span>
+                  <span className="font-medium"> upcoming appointment{scheduled.length !== 1 ? "s" : ""} this month</span>
+                  {scheduledPast.length > 0 && (
+                    <span className="text-slate-400 font-medium"> · {scheduledPast.length} past</span>
+                  )}
+                </div>
               </div>
             </motion.div>
           </div>

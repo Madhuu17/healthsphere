@@ -230,19 +230,18 @@ function TimelineEntry({ entry, formatDate }: { entry: any; formatDate: (d: any)
 // ── Filter tabs ───────────────────────────────────────────────────────────
 const FILTERS = [
   { key: "all",          label: "All" },
-  { key: "appointment",  label: "Appointments" },
-  { key: "consultation", label: "Consultations" },
   { key: "prescription", label: "Prescriptions" },
   { key: "lab_report",   label: "Lab Reports" },
   { key: "xray",         label: "Scans / X-Rays" },
   { key: "report",       label: "Reports" },
+  { key: "vaccination",  label: "Vaccinations" },
 ];
 
 // ══════════════════════════════════════════════════════════════════════════
 // Page
 // ══════════════════════════════════════════════════════════════════════════
 export default function PatientTimeline() {
-  const { profile, pastAppointments, timeline, formatDate } = usePatient();
+  const { profile, timeline, formatDate } = usePatient();
   const [filter, setFilter] = useState("all");
   const [backendEntries, setBackendEntries] = useState<any[]>([]);
   const [backendLoading, setBackendLoading] = useState(true);
@@ -263,8 +262,7 @@ export default function PatientTimeline() {
       .finally(() => setBackendLoading(false));
   }, [patientId]);
 
-  // Fallback: merge from context if backend returns empty
-  const todayYMD = new Date().toISOString().split("T")[0];
+  // Fallback: merge from context if backend returns empty (records only — no appointments)
   const contextEntries = [
     ...timeline.map((t: any) => ({
       _id:        t._id,
@@ -278,27 +276,6 @@ export default function PatientTimeline() {
       imageUrl:   t.imageUrl || "",
       recordType: t.recordType || "report",
     })),
-    ...pastAppointments
-      // exclude future scheduled; only completed/cancelled or past-date
-      .filter((a: any) => {
-        if (a.status === "completed" || a.status === "cancelled") return true;
-        return a.date < todayYMD;
-      })
-      .filter((a: any) => !timeline.some((t: any) => t.title?.includes(a.appointmentId)))
-      .map((a: any) => ({
-        _id:        a._id,
-        entryType:  "appointment",
-        category:   a.status === "completed" ? "consultation" : "appointment",
-        title:      `Appointment with ${a.doctorName}`,
-        doctorName: a.doctorName,
-        hospital:   a.hospital,
-        date:       a.date,
-        timeSlot:   a.timeSlot,
-        status:     a.status,
-        diagnosis:  a.diagnosis || "",
-        reportUrl:  a.reportUrl || "",
-        appointmentId: a.appointmentId,
-      })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const entries = backendEntries.length > 0 ? backendEntries : contextEntries;
@@ -317,7 +294,7 @@ export default function PatientTimeline() {
         <div>
           <h2 className="text-2xl font-black text-white">Medical Timeline</h2>
           <p className="text-slate-400 text-sm mt-1">
-            A chronological record of all appointments, diagnoses, prescriptions, and reports.
+            A chronological record of diagnoses, prescriptions, lab reports, and uploaded records.
           </p>
         </div>
         <div className="ml-auto text-right shrink-0">

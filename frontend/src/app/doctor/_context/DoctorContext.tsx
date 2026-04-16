@@ -4,8 +4,21 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, ty
 import { useRouter } from "next/navigation";
 
 const API = "http://localhost:5000";
-const SLOT_TIMES = ["09:00 AM","09:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM",
-                    "12:00 PM","02:00 PM","02:30 PM","03:00 PM","03:30 PM","04:00 PM"];
+const SLOT_TIMES = [
+  "09:00 AM","09:30 AM",
+  "10:00 AM","10:30 AM",
+  "11:00 AM","11:30 AM",
+  "12:00 PM","12:30 PM",
+  "01:00 PM","01:30 PM",
+  "02:00 PM","02:30 PM",
+  "03:00 PM","03:30 PM",
+  "04:00 PM","04:30 PM",
+  "05:00 PM","05:30 PM",
+  "06:00 PM","06:30 PM",
+  "07:00 PM","07:30 PM",
+  "08:00 PM","08:30 PM",
+  "09:00 PM",
+];
 
 function getWeekDates(offset = 0) {
   const today = new Date();
@@ -218,7 +231,17 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setPatientData(data.patient);
-      setPatientTimeline(data.timeline || []);
+
+      // Fetch the SAME merged timeline that the patient sees
+      const pid = data.patient?.patientId || searchId;
+      const tlRes = await fetch(`${API}/api/appointments/patient/${pid}/timeline`);
+      const tlData = await tlRes.json();
+      if (tlData.success && tlData.data?.length) {
+        setPatientTimeline(tlData.data);
+      } else {
+        setPatientTimeline([]);
+      }
+
       setAccessStep("view");
     } catch (err: any) { setAccessError(err.message); }
     finally { setAccessLoading(false); }
@@ -250,7 +273,10 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       attachedFiles.forEach(f => fd.append("attachments", f));
       const recRes = await fetch(`${API}/api/doctor/add-record`, { method: "POST", body: fd });
       const recData = await recRes.json();
-      if (recRes.ok) setPatientTimeline((prev: any[]) => [recData.record, ...prev]);
+      // Re-fetch the full merged timeline to stay in sync with patient view
+      const tlRes2 = await fetch(`${API}/api/appointments/patient/${patientData.patientId}/timeline`);
+      const tlData2 = await tlRes2.json();
+      if (tlData2.success && tlData2.data) setPatientTimeline(tlData2.data);
       setShowAddRecord(false); setNewRecord({ type: "prescription", title: "", description: "" });
       setAttachedFiles([]); setRxTitle(""); setRxNotes(""); setRxMeds([{ ...emptyMed }]);
       alert("✅ Prescription created with duration tracking!");
@@ -272,7 +298,10 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`${API}/api/doctor/add-record`, { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      setPatientTimeline((prev: any[]) => [data.record, ...prev]);
+      // Re-fetch the full merged timeline to stay in sync with patient view
+      const tlRes3 = await fetch(`${API}/api/appointments/patient/${patientData.patientId}/timeline`);
+      const tlData3 = await tlRes3.json();
+      if (tlData3.success && tlData3.data) setPatientTimeline(tlData3.data);
       setShowAddRecord(false); setNewRecord({ type: "prescription", title: "", description: "" });
       setAttachedFiles([]);
     } catch (err: any) { alert(err.message); }
