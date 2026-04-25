@@ -52,6 +52,7 @@ export default function MemoryInsights({ userId }: MemoryInsightsProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(true);
+  const [openWeek, setOpenWeek] = useState<string>("Week 1");
 
   const fetchInsights = async () => {
     if (!userId) return;
@@ -76,13 +77,27 @@ export default function MemoryInsights({ userId }: MemoryInsightsProps) {
   const insights = data?.insights || [];
   const hasData = insights.length > 0;
 
-  // Group insights by category
-  const grouped = insights.reduce<Record<string, InsightItem[]>>((acc, item) => {
-    const cat = item.category || "symptom";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(item);
+  // Group insights by week based on actual dates
+  const weeklyData = insights.reduce<Record<string, InsightItem[]>>((acc, item) => {
+    const itemDate = new Date(item.lastUpdated || item.firstDetected || new Date());
+    const today = new Date();
+    
+    // Normalize to start of day for accurate day calculation
+    itemDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    
+    const diffTime = today.getTime() - itemDate.getTime();
+    const diffDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+    
+    let weekNum = 1; // Week 1 (0-6 days ago)
+    if (diffDays >= 7 && diffDays <= 13) weekNum = 2; // Week 2 (7-13 days ago)
+    else if (diffDays >= 14 && diffDays <= 20) weekNum = 3; // Week 3 (14-20 days ago)
+    else if (diffDays >= 21) weekNum = 4; // Week 4 (21+ days ago)
+    
+    const weekKey = `Week ${weekNum}`;
+    acc[weekKey].push(item);
     return acc;
-  }, {});
+  }, { "Week 1": [], "Week 2": [], "Week 3": [], "Week 4": [] });
 
   // Don't render at all if empty
   if (!loading && !error && !hasData) return null;
@@ -141,62 +156,95 @@ export default function MemoryInsights({ userId }: MemoryInsightsProps) {
             </div>
           )}
 
-          {/* Insights by category */}
-          {hasData && Object.entries(grouped).map(([category, items]) => {
-            const config = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.symptom;
-            const Icon = config.icon;
+          {/* Insights by Week (Accordion) */}
+          {hasData && ["Week 1", "Week 2", "Week 3", "Week 4"].map(weekKey => {
+            const weekItems = weeklyData[weekKey] || [];
+            const isWeekOpen = openWeek === weekKey;
+
+            // Group items inside the week by category
+            const groupedByCat = weekItems.reduce<Record<string, InsightItem[]>>((acc, item) => {
+              const cat = item.category || "symptom";
+              if (!acc[cat]) acc[cat] = [];
+              acc[cat].push(item);
+              return acc;
+            }, {});
 
             return (
-              <div key={category} className={`bg-gradient-to-r ${config.gradient} rounded-2xl p-4 border ${config.border}`}>
-                {/* Category header */}
-                <div className="flex items-center gap-2 mb-3">
-                  <Icon size={14} className={config.text} />
-                  <h4 className={`text-xs font-black uppercase tracking-wider ${config.text}`}>
-                    {config.label}
-                  </h4>
-                  <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full ${config.text} bg-white/60`}>
-                    {items.length}
-                  </span>
-                </div>
+              <div key={weekKey} className="border border-slate-200/60 rounded-2xl overflow-hidden mb-3 last:mb-0 bg-white/40">
+                <button
+                  onClick={() => setOpenWeek(isWeekOpen ? "" : weekKey)}
+                  className="w-full flex items-center justify-between p-4 bg-slate-50/50 hover:bg-slate-100/80 transition-colors"
+                >
+                  <span className="font-bold text-sm text-slate-800">{weekKey}</span>
+                  {isWeekOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+                </button>
 
-                {/* Pattern items */}
-                <div className="space-y-2">
-                  {items.map((item, i) => {
-                    const badge = CONFIDENCE_BADGE[item.confidence] || CONFIDENCE_BADGE.low;
-                    return (
-                      <div
-                        key={i}
-                        className={`flex items-center justify-between ${config.bg} rounded-xl px-3 py-2.5 border shadow-sm`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {item.confidence === "high" && (
-                            <span className="relative flex h-2 w-2 shrink-0">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                            </span>
-                          )}
-                          <span className="text-xs font-bold text-slate-800 capitalize truncate">
-                            {item.pattern}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0 ml-2">
-                          <span className="text-[10px] font-bold text-slate-500">
-                            {item.count}×
-                          </span>
-                          <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded-full ${badge.bg} ${badge.text}`}>
-                            {item.confidence}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {isWeekOpen && (
+                  <div className="p-4 space-y-4" style={{ animation: "slideDown 200ms ease-out" }}>
+                    {weekItems.length === 0 ? (
+                      <p className="text-xs text-slate-500 text-center py-2">No records available</p>
+                    ) : (
+                      Object.entries(groupedByCat).map(([category, items]) => {
+                        const config = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.symptom;
+                        const Icon = config.icon;
 
-                {/* Summary message for top items */}
-                {items.length > 0 && items[0].count >= 3 && (
-                  <p className={`mt-2.5 text-[11px] font-semibold ${config.text} opacity-80`}>
-                    ⚡ You&apos;ve reported &ldquo;{items[0].pattern}&rdquo; {items[0].count} times — consider discussing this with your doctor
-                  </p>
+                        return (
+                          <div key={category} className={`bg-gradient-to-r ${config.gradient} rounded-2xl p-4 border ${config.border}`}>
+                            {/* Category header */}
+                            <div className="flex items-center gap-2 mb-3">
+                              <Icon size={14} className={config.text} />
+                              <h4 className={`text-xs font-black uppercase tracking-wider ${config.text}`}>
+                                {config.label}
+                              </h4>
+                              <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full ${config.text} bg-white/60`}>
+                                {items.length}
+                              </span>
+                            </div>
+
+                            {/* Pattern items */}
+                            <div className="space-y-2">
+                              {items.map((item, i) => {
+                                const badge = CONFIDENCE_BADGE[item.confidence] || CONFIDENCE_BADGE.low;
+                                return (
+                                  <div
+                                    key={i}
+                                    className={`flex items-center justify-between ${config.bg} rounded-xl px-3 py-2.5 border shadow-sm`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {item.confidence === "high" && (
+                                        <span className="relative flex h-2 w-2 shrink-0">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                                        </span>
+                                      )}
+                                      <span className="text-xs font-bold text-slate-800 capitalize truncate">
+                                        {item.pattern}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                                      <span className="text-[10px] font-bold text-slate-500">
+                                        {item.count}×
+                                      </span>
+                                      <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded-full ${badge.bg} ${badge.text}`}>
+                                        {item.confidence}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Summary message for top items */}
+                            {items.length > 0 && items[0].count >= 3 && (
+                              <p className={`mt-2.5 text-[11px] font-semibold ${config.text} opacity-80`}>
+                                ⚡ You&apos;ve reported &ldquo;{items[0].pattern}&rdquo; {items[0].count} times — consider discussing this with your doctor
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
             );
