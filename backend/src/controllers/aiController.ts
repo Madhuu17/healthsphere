@@ -3,6 +3,7 @@ import { checkSymptomsAI } from '../utils/aiSymptomChecker';
 import { matchDoctorAI } from '../utils/doctorMatcher';
 import { simplifyReportAI } from '../utils/reportSimplifier';
 import { storeSymptomCheck } from '../utils/memoryService';
+import { sanitizeForAI } from '../utils/aiSanitizer';
 import {
   buildEnrichedPrompt,
   logInteraction,
@@ -17,21 +18,26 @@ import {
 
 export const checkSymptoms = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { symptoms, userId } = req.body;
+    const { userId } = req.body;
 
-    if (!symptoms || typeof symptoms !== 'string' || symptoms.trim() === '') {
-      res.status(400).json({ success: false, message: 'symptoms field is required and must be a non-empty string' });
+    // ── Sanitize & validate — strips all PII before AI call ──
+    let sanitizedData;
+    try {
+      sanitizedData = sanitizeForAI(req.body);
+    } catch (sanitizeErr: any) {
+      res.status(sanitizeErr.statusCode || 400).json({ success: false, message: sanitizeErr.message });
       return;
     }
+    const { symptoms } = sanitizedData;
 
     // ── Fetch enriched intelligence context BEFORE AI call ──
     let patientHistory = '';
     if (userId) {
-      patientHistory = await buildEnrichedPrompt(userId, symptoms.trim(), 'symptom_check');
+      patientHistory = await buildEnrichedPrompt(userId, symptoms, 'symptom_check');
     }
 
-    // ── Call AI with enriched prompt ──
-    const result = await checkSymptomsAI(symptoms.trim(), patientHistory || undefined);
+    // ── Call AI with sanitized + enriched prompt ──
+    const result = await checkSymptomsAI(symptoms, patientHistory || undefined);
 
     // ── Store in Hindsight memory ──
     if (userId) {
@@ -76,14 +82,17 @@ export const checkSymptoms = async (req: Request, res: Response): Promise<void> 
 
 export const matchDoctor = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { symptoms } = req.body;
-
-    if (!symptoms || typeof symptoms !== 'string' || symptoms.trim() === '') {
-      res.status(400).json({ success: false, message: 'symptoms field is required and must be a non-empty string' });
+    // ── Sanitize & validate — strips all PII before AI call ──
+    let sanitizedData;
+    try {
+      sanitizedData = sanitizeForAI(req.body);
+    } catch (sanitizeErr: any) {
+      res.status(sanitizeErr.statusCode || 400).json({ success: false, message: sanitizeErr.message });
       return;
     }
+    const { symptoms } = sanitizedData;
 
-    const result = await matchDoctorAI(symptoms.trim());
+    const result = await matchDoctorAI(symptoms);
 
     res.status(200).json({
       success: true,
