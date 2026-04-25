@@ -6,11 +6,15 @@ import {
   getInsights,
   getEvolution,
   getHealthReport,
+  generateQuestions,
 } from '../controllers/aiController';
 
 const router = Router();
 
-// POST /api/ai/symptoms
+// POST /api/ai/generate-questions  (Step 1 — get follow-up questions)
+router.post('/generate-questions', generateQuestions);
+
+// POST /api/ai/symptoms  (Step 2 — final analysis with optional answers)
 router.post('/symptoms', checkSymptoms);
 
 // POST /api/ai/match-doctor
