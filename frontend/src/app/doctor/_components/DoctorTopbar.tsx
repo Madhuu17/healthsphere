@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import LanguageSwitcher from "../../../components/LanguageSwitcher";
 
 const TITLES: Record<string, string> = {
   "/doctor/overview":       "Overview",
@@ -21,6 +22,7 @@ export default function DoctorTopbar() {
         </p>
       </div>
       <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse"/>
         <span className="text-xs text-slate-500 font-semibold">System Online</span>
       </div>

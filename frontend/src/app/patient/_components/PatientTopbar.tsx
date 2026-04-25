@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Calendar as CalendarIcon, FileText, Pill, Activity, Mail, LayoutDashboard, Salad } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePatient } from "../_context/PatientContext";
+import LanguageSwitcher from "../../../components/LanguageSwitcher";
 
 const PAGE_TITLES: Record<string, { label: string; icon: any }> = {
   "/patient/overview":        { label: "Overview",        icon: LayoutDashboard },
@@ -60,6 +61,8 @@ export default function PatientTopbar() {
           <span className="text-slate-300">·</span>
           <span className="text-teal-500 font-bold">{nowTime()}</span>
         </div>
+
+        <LanguageSwitcher />
 
         {/* Calendar icon button */}
         <button

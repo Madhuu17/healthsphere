@@ -49,3 +49,29 @@ nextjs-portal,
   -webkit-overflow-scrolling: touch;
 }
 
+/* Google Translate widget styles overrides */
+.goog-te-banner-frame.skiptranslate, 
+.goog-te-gadget-icon,
+.goog-te-gadget-simple img {
+    display: none !important;
+}
+
+body {
+    top: 0px !important;
+}
+
+#goog-gt-tt {
+    display: none !important;
+}
+
+/* Hide the tooltip that Google Translate shows on hover */
+.goog-text-highlight {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.skiptranslate > iframe.skiptranslate {
+    display: none !important;
+    visibility: hidden !important;
+}
