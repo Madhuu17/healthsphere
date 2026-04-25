@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { onAuthStateChanged, User, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 const API = "http://localhost:5000";
 const SLOT_TIMES = [
@@ -167,14 +169,24 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user") || "null");
-    if (!user || user.role !== "doctor") { router.push("/login"); return; }
-    if (!user.isProfileCompleted) { router.push("/doctor/setup-profile"); return; }
-    setDoctor(user);
-    fetchSchedule(user.id);
-    fetchProfile(user.id);
-  }, []);
+    const unsubscribe = onAuthStateChanged(auth, (userAuth) => {
+      if (userAuth) {
+        setCurrentUser(userAuth);
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        if (!user || user.role !== "doctor") { router.push("/login"); return; }
+        if (!user.isProfileCompleted) { router.push("/doctor/setup-profile"); return; }
+        setDoctor(user);
+        fetchSchedule(user.id);
+        fetchProfile(user.id);
+      } else {
+        router.push("/login");
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   useEffect(() => {
     setWeekDates(getWeekDates(weekOffset));
@@ -299,7 +311,15 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
     finally { setUploading(false); }
   };
 
-  const handleLogout = () => { localStorage.removeItem("user"); router.push("/login"); };
+  const handleLogout = async () => { 
+    try {
+      await signOut(auth);
+      localStorage.removeItem("user"); 
+      router.push("/login"); 
+    } catch (err: any) {
+      console.error("Logout Error:", err.message);
+    }
+  };
 
   if (!doctor) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">

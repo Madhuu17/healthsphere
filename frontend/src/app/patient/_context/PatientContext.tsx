@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 const API = "http://localhost:5000";
 
@@ -221,15 +223,24 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   // ── Data fetching ──
   useEffect(() => {
-    const userStr = localStorage.getItem("user");
-    if (!userStr) { router.push("/login"); return; }
-    const user = JSON.parse(userStr);
+    const unsubscribe = onAuthStateChanged(auth, (userAuth) => {
+      if (!userAuth) {
+        router.push("/login");
+        return;
+      }
+      setCurrentUser(userAuth);
 
-    if (!user.isProfileCompleted) { router.push("/patient/setup-profile"); return; }
+      const userStr = localStorage.getItem("user");
+      if (!userStr) { router.push("/login"); return; }
+      const user = JSON.parse(userStr);
 
-    const patientId = user.id || user.patientId;
+      if (!user.isProfileCompleted) { router.push("/patient/setup-profile"); return; }
+
+      const patientId = user.id || user.patientId;
     setEditName(user.name || "");
 
     // ── 1) Fetch dashboard (profile + timeline) ──
@@ -365,11 +376,22 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setLiveDoctors(data); })
       .catch(() => {});
+      
+    });
+    return () => unsubscribe();
   }, [router]);
 
   // ── Handlers ──
   const handleLogout = () => setShowLogoutModal(true);
-  const confirmLogout = () => { localStorage.clear(); router.push("/login"); };
+  const confirmLogout = async () => { 
+    try {
+      await signOut(auth);
+      localStorage.clear(); 
+      router.push("/login"); 
+    } catch (err: any) {
+      console.error("Logout error:", err.message);
+    }
+  };
 
   const openAppt = () => {
     setApptStep(1); setCity(""); setHospital(""); setDoctor(""); setSlot(null);

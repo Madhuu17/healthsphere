@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Stethoscope, Calendar, Search, BarChart2, LogOut, Award, BriefcaseMedical, Mail, AlertTriangle } from "lucide-react";
 import { useDoctor } from "../_context/DoctorContext";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 const NAV = [
   { id: "overview",        href: "/doctor/overview",        label: "Overview",        icon: BarChart2 },
@@ -19,9 +21,14 @@ export default function DoctorSidebar() {
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  function confirmLogout() {
-    localStorage.clear();
-    router.push("/login");
+  async function confirmLogout() {
+    try {
+      await signOut(auth);
+      localStorage.clear();
+      router.push("/login");
+    } catch (err: any) {
+      console.error("Logout error:", err.message);
+    }
   }
 
   return (
