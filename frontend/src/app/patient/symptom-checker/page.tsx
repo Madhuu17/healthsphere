@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity, Stethoscope, UserRound, FileText,
   Pill, Mail, LogOut, ArrowLeft, Calendar, Brain,
-  ChevronRight, Send, SkipForward,
+  ChevronRight, Send, SkipForward, Mic, MicOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import MemoryInsights from "../_components/MemoryInsights";
@@ -95,6 +95,11 @@ export default function SymptomCheckerPage() {
   const [userId, setUserId] = useState("");
   const [memoryActive, setMemoryActive] = useState(false);
 
+  // Speech-to-Text state
+  const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState("");
+  const recognitionRef = useRef<any>(null);
+
   useEffect(() => {
     try {
       const userStr = localStorage.getItem("user");
@@ -109,6 +114,71 @@ export default function SymptomCheckerPage() {
     localStorage.removeItem("user");
     localStorage.removeItem("isLoggedIn");
     router.push("/login");
+  };
+
+  // ── Speech-to-Text Logic ───────────────────────────────────────────────
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechError("Speech recognition is not supported in this browser. Please use Chrome.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    let currentTranscript = symptoms;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setSpeechError("");
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+
+      if (final) {
+        currentTranscript = currentTranscript ? currentTranscript + " " + final : final;
+      }
+      
+      const displayTranscript = currentTranscript + (interim ? " " + interim : "");
+      setSymptoms(displayTranscript.trimStart());
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      if (event.error === 'not-allowed') {
+        setSpeechError("Microphone permission denied.");
+      } else if (event.error === 'no-speech') {
+        // ignore no-speech
+      } else {
+        setSpeechError("Speech error: " + event.error);
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
   };
 
   // ── Step 1 → Step 2: generate follow-up questions ───────────────────────
@@ -284,22 +354,39 @@ export default function SymptomCheckerPage() {
                 <motion.div key="input"
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
                   className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 bg-teal-100 rounded-2xl flex items-center justify-center">
-                      <Stethoscope size={22} className="text-teal-600" />
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-teal-100 rounded-2xl flex items-center justify-center">
+                        <Stethoscope size={22} className="text-teal-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-800">Describe Your Symptoms</h2>
+                        <p className="text-slate-500 text-sm">Be as detailed as possible for better results</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-800">Describe Your Symptoms</h2>
-                      <p className="text-slate-500 text-sm">Be as detailed as possible for better results</p>
-                    </div>
+
+                    <button
+                      onClick={toggleListening}
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                        isListening
+                          ? "bg-red-50 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse"
+                          : "bg-slate-100 text-slate-400 hover:bg-teal-50 hover:text-teal-500"
+                      }`}
+                      title={isListening ? "Stop listening" : "Start speaking"}
+                    >
+                      {isListening ? <Mic size={22} /> : <MicOff size={22} />}
+                    </button>
                   </div>
                   <textarea
                     value={symptoms}
                     onChange={(e) => setSymptoms(e.target.value)}
-                    placeholder="e.g. I have a headache, fever of 38°C, and sore throat for the past 2 days..."
+                    placeholder={isListening ? "Listening..." : "e.g. I have a headache, fever of 38°C, and sore throat for the past 2 days..."}
                     rows={5}
                     className="w-full px-4 py-3 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-teal-400/30 focus:border-teal-400 text-sm font-medium text-slate-700 bg-slate-50 transition-all resize-none"
                   />
+                  {speechError && (
+                    <p className="text-red-500 text-xs mt-2 font-medium">{speechError}</p>
+                  )}
                   <button
                     onClick={handleAnalyze}
                     disabled={loading || !symptoms.trim()}
