@@ -233,16 +233,97 @@ export default function DoctorPatientRecords() {
     showAddRecord, setShowAddRecord, newRecord, setNewRecord,
     uploading, attachedFiles, setAttachedFiles, fileRef, handleAddRecord,
     rxTitle, setRxTitle, rxNotes, setRxNotes, rxMeds, setRxMeds,
-    addMed, removeMed, updateMed, emptyMed, savedPatients, openPatientRecords
+    addMed, removeMed, updateMed, emptyMed, savedPatients, setSavedPatients, openPatientRecords,
+    doctor, API, showToast
   } = ctx;
 
   const [filterQuery, setFilterQuery] = useState("");
-  const filteredPatients = savedPatients.filter((p: any) => 
-    p.name.toLowerCase().includes(filterQuery.toLowerCase())
-  );
+  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; type: "single" | "bulk"; targetId?: string }>({ open: false, type: "single" });
+  const [deleting, setDeleting] = useState(false);
+
+  // Filter and Sort Alphabetically
+  const filteredPatients = savedPatients
+    .filter((p: any) => p.name.toLowerCase().includes(filterQuery.toLowerCase()))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+  const toggleSelectPatient = (e: React.MouseEvent, pid: string) => {
+    e.stopPropagation();
+    setSelectedPatients(prev => prev.includes(pid) ? prev.filter(id => id !== pid) : [...prev, pid]);
+  };
+
+  const handleSingleDelete = async () => {
+    if (!deleteModal.targetId || !doctor) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API}/api/doctor/saved-patients/${doctor.id}/${deleteModal.targetId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error("Failed to remove patient");
+      
+      // Optimistic UI Update
+      setSavedPatients(savedPatients.filter(p => p.patientId !== deleteModal.targetId));
+      setSelectedPatients(prev => prev.filter(id => id !== deleteModal.targetId));
+      showToast("Patient removed successfully", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setDeleting(false);
+      setDeleteModal({ open: false, type: "single" });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedPatients.length === 0 || !doctor) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API}/api/doctor/saved-patients/bulk`, {
+        method: 'DELETE',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorId: doctor.id, patientIds: selectedPatients })
+      });
+      if (!res.ok) throw new Error("Failed to remove patients");
+
+      // Optimistic UI Update
+      setSavedPatients(savedPatients.filter(p => !selectedPatients.includes(p.patientId)));
+      setSelectedPatients([]);
+      showToast("Selected patients removed", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setDeleting(false);
+      setDeleteModal({ open: false, type: "bulk" });
+    }
+  };
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-5 relative">
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {deleteModal.open && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-xl">
+              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                <Trash2 size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Remove Patient{deleteModal.type === "bulk" ? "s" : ""}</h3>
+              <p className="text-slate-500 text-sm mb-6">
+                Are you sure you want to remove {deleteModal.type === "bulk" ? `${selectedPatients.length} patients` : "this patient"} from your list?
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteModal({ open: false, type: "single" })} disabled={deleting}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
+                  Cancel
+                </button>
+                <button onClick={deleteModal.type === "single" ? handleSingleDelete : handleBulkDelete} disabled={deleting}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center">
+                  {deleting ? "Removing..." : "Remove"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Search & Add Step */}
       {accessStep === "search" && (
         <div className="space-y-6">
@@ -277,15 +358,23 @@ export default function DoctorPatientRecords() {
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <User size={20} className="text-blue-600"/> Saved Patients
               </h2>
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search by name..." 
-                  value={filterQuery}
-                  onChange={(e) => setFilterQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 outline-none text-sm font-medium w-64"
-                />
+              <div className="flex items-center gap-3">
+                {selectedPatients.length > 0 && (
+                  <button onClick={() => setDeleteModal({ open: true, type: "bulk" })}
+                    className="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-xl text-sm font-bold border border-red-200 hover:bg-red-100 transition-colors">
+                    <Trash2 size={16} /> Delete Selected ({selectedPatients.length})
+                  </button>
+                )}
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search by name..." 
+                    value={filterQuery}
+                    onChange={(e) => setFilterQuery(e.target.value)}
+                    className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 outline-none text-sm font-medium w-64"
+                  />
+                </div>
               </div>
             </div>
 
@@ -302,21 +391,35 @@ export default function DoctorPatientRecords() {
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 {filteredPatients.map((p: any) => (
-                  <button 
+                  <div
                     key={p.patientId}
                     onClick={() => openPatientRecords(p.patientId)}
-                    className="flex flex-col items-start p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group"
+                    className="flex flex-col items-start p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group cursor-pointer relative"
                   >
-                    <div className="flex items-center justify-between w-full mb-2">
-                      <h3 className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{p.name}</h3>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                        {p.patientId}
-                      </span>
+                    <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ open: true, type: "single", targetId: p.patientId }); }}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                    <div className="flex items-center gap-3 w-full mb-2 pr-10">
+                      <div onClick={(e) => toggleSelectPatient(e, p.patientId)}
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                          selectedPatients.includes(p.patientId) ? "bg-blue-600 border-blue-600" : "bg-white border-slate-300 hover:border-blue-400"
+                        }`}>
+                        {selectedPatients.includes(p.patientId) && <CheckCircle2 size={14} className="text-white" />}
+                      </div>
+                      <div className="flex items-center justify-between flex-1 min-w-0">
+                        <h3 className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors truncate pr-2">{p.name}</h3>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full shrink-0">
+                          {p.patientId}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5 ml-8">
                       Contact: {p.contactNumber || "N/A"}
                     </p>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}

@@ -14,6 +14,8 @@ import {
   getPatientSummary,
   addSavedPatient,
   getSavedPatients,
+  removeSavedPatient,
+  bulkRemoveSavedPatients,
 } from '../controllers/doctorController';
 
 const router = express.Router();
@@ -30,6 +32,8 @@ router.post('/verify',             verifyPatientAccess);
 // Saved Patients
 router.post('/saved-patients',     addSavedPatient);
 router.get('/saved-patients/:doctorId', getSavedPatients);
+router.delete('/saved-patients/:doctorId/:patientId', removeSavedPatient);
+router.delete('/saved-patients/bulk', bulkRemoveSavedPatients);
 
 // AI Symptom Summary for doctor
 router.get('/patient-summary/:patientId', getPatientSummary);

@@ -246,6 +246,32 @@ export const getSavedPatients = async (req: Request, res: Response): Promise<voi
   }
 };
 
+// ─── Remove single saved patient ───────────────────────────────────────────
+export const removeSavedPatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, patientId } = req.params;
+    await DoctorPatient.findOneAndDelete({ doctorId, patientId });
+    res.json({ message: 'Patient removed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─── Bulk remove saved patients ────────────────────────────────────────────
+export const bulkRemoveSavedPatients = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, patientIds } = req.body;
+    if (!doctorId || !Array.isArray(patientIds)) {
+      res.status(400).json({ message: 'Invalid payload' });
+      return;
+    }
+    await DoctorPatient.deleteMany({ doctorId, patientId: { $in: patientIds } });
+    res.json({ message: 'Selected patients removed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // ─── Doctor adds prescription / record to patient ────────────────────────────
 export const addPatientRecord = async (req: Request, res: Response): Promise<void> => {
   try {

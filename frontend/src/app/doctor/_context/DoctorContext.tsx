@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, ty
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import Toast, { ToastType } from "@/components/ui/Toast";
 
 const API = "http://localhost:5000";
 const SLOT_TIMES = [
@@ -101,6 +102,8 @@ interface DoctorContextType {
   dayNames: string[];
   SLOT_TIMES: string[];
   API: string;
+  // Toast
+  showToast: (msg: string, type?: ToastType) => void;
 }
 
 const DoctorContext = createContext<DoctorContextType | null>(null);
@@ -116,6 +119,12 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
 
   const [doctor, setDoctor] = useState<any>(null);
   const [doctorProfile, setDoctorProfile] = useState<any>(null);
+
+  // Toast State
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const showToast = useCallback((message: string, type: ToastType = "success") => {
+    setToast({ message, type });
+  }, []);
 
   // Schedule
   const [weekOffset, setWeekOffset] = useState(0);
@@ -247,7 +256,7 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       
       await fetchSavedPatients(); // Refresh list
       setSearchId(""); // Clear input
-      alert("Patient added successfully!");
+      showToast("Patient added successfully!", "success");
     } catch (err: any) {
       setAccessError(err.message);
     } finally {
@@ -292,9 +301,9 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
   // Add record (prescription or other)
   const handleAddPrescription = async () => {
     if (!patientData || !doctor) return;
-    if (!rxTitle.trim()) { alert("Please enter a prescription title."); return; }
+    if (!rxTitle.trim()) { showToast("Please enter a prescription title.", "error"); return; }
     const validMeds = rxMeds.filter((m: any) => m.medicineName && m.dosage && m.frequency && m.durationDays);
-    if (validMeds.length === 0) { alert("Please add at least one medicine with all required fields."); return; }
+    if (validMeds.length === 0) { showToast("Please add at least one medicine with all required fields.", "error"); return; }
     setUploading(true);
     try {
       const rxRes = await fetch(`${API}/api/prescriptions/${patientData.patientId}`, {
@@ -321,8 +330,8 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       if (tlData2.success && tlData2.data) setPatientTimeline(tlData2.data);
       setShowAddRecord(false); setNewRecord({ type: "prescription", title: "", description: "" });
       setAttachedFiles([]); setRxTitle(""); setRxNotes(""); setRxMeds([{ ...emptyMed }]);
-      alert("✅ Prescription created with duration tracking!");
-    } catch (err: any) { alert(err.message); }
+      showToast("Prescription created with duration tracking!", "success");
+    } catch (err: any) { showToast(err.message, "error"); }
     finally { setUploading(false); }
   };
 
@@ -346,7 +355,8 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       if (tlData3.success && tlData3.data) setPatientTimeline(tlData3.data);
       setShowAddRecord(false); setNewRecord({ type: "prescription", title: "", description: "" });
       setAttachedFiles([]);
-    } catch (err: any) { alert(err.message); }
+      showToast("Record added successfully!", "success");
+    } catch (err: any) { showToast(err.message, "error"); }
     finally { setUploading(false); }
   };
 
@@ -381,9 +391,16 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       showAddRecord, setShowAddRecord, newRecord, setNewRecord, uploading, attachedFiles, setAttachedFiles,
       fileRef, handleAddRecord,
       rxTitle, setRxTitle, rxNotes, setRxNotes, rxMeds, setRxMeds, addMed, removeMed, updateMed, emptyMed,
-      handleLogout, formatDate, toYMD, today: todayStr, dayNames, SLOT_TIMES, API,
+      handleLogout, formatDate, toYMD, today: todayStr, dayNames, SLOT_TIMES, API, showToast,
     }}>
       {children}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </DoctorContext.Provider>
   );
 }
