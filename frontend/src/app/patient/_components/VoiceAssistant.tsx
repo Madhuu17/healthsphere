@@ -27,7 +27,7 @@ interface DoctorResult {
 
 interface Props {
   onClose: () => void;
-  onBooked: () => void;
+  onBooked: (apptData?: any) => void;
 }
 
 export default function VoiceAssistant({ onClose, onBooked }: Props) {
@@ -345,7 +345,7 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
         setBookedAppt(data.appointment);
         setPhase("success");
         setStatusText("Appointment booked!");
-        onBooked();
+        onBooked(data.appointment);
       } else if (res.status === 409) {
         setAvailableSlots(data.alternativeSlots || []);
         setStatusText("Slot was just taken. Choose an alternative:");

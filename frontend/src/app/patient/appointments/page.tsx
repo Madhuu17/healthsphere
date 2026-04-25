@@ -176,16 +176,28 @@ export default function PatientAppointments() {
     appointmentsLoading,
     openAppt,
     formatDate,
+    refreshAppointments,
+    setMessages,
   } = usePatient();
 
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [showVoice, setShowVoice] = useState(false);
 
   // Re-fetch appointments after voice booking
-  const refreshAfterVoiceBook = useCallback(() => {
-    // Trigger a page-level re-render by toggling tab (appointments come from context)
-    // The PatientContext re-fetches on mount, so closing the overlay is enough
-  }, []);
+  const refreshAfterVoiceBook = useCallback(async (apptData?: any) => {
+    // 1) Show notification locally
+    if (apptData) {
+      setMessages((prev: any[]) => [{ 
+        id: Date.now(), 
+        type: "appointment", 
+        text: `Voice Booking: Appointment scheduled with ${apptData.doctorName} on ${formatDate(apptData.date)} at ${apptData.timeSlot}`, 
+        date: "Just Now", 
+        isNew: true 
+      }, ...prev]);
+    }
+    // 2) Refresh patient appointments from DB
+    await refreshAppointments();
+  }, [refreshAppointments, setMessages, formatDate]);
 
   // Upcoming → ascending (nearest first) — already sorted by backend
   const sortedUpcoming = [...upcomingAppointments];
@@ -361,9 +373,9 @@ export default function PatientAppointments() {
         {showVoice && (
           <VoiceAssistant
             onClose={() => setShowVoice(false)}
-            onBooked={() => {
-              // Appointments will refresh via context on next navigation
-              refreshAfterVoiceBook();
+            onBooked={(apptData) => {
+              // Trigger notification and DB refresh
+              refreshAfterVoiceBook(apptData);
             }}
           />
         )}

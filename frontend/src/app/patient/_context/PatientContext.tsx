@@ -124,6 +124,8 @@ interface PatientContextType {
   openAppt: () => void;
   fetchSlots: (docId: string, date: string) => Promise<void>;
   confirmAppt: () => Promise<void>;
+  setMessages: (updater: any) => void;
+  refreshAppointments: () => Promise<void>;
   markOneRead: (msg: any) => void;
   markAllRead: () => void;
   // Helpers
@@ -411,27 +413,11 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     finally { setSlotLoading(false); }
   };
 
-  const confirmAppt = async () => {
-    if (!selectedDoc || !apptDate || !selectedSlot) return;
+  const refreshAppointments = async () => {
     const userStr = localStorage.getItem("user");
     if (!userStr) return;
     const user = JSON.parse(userStr);
-    setBookingLoading(true); setBookingError("");
     try {
-      const res = await fetch(`${API}/api/doctor/book`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId: user.id, patientName: user.name,
-          patientEmail: user.email || localStorage.getItem("userEmail") || "",
-          doctorId: selectedDoc.doctorId, doctorName: selectedDoc.name,
-          hospital: selectedDoc.hospital, date: apptDate, timeSlot: selectedSlot
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-
-      // Re-fetch appointments from DB to ensure persistence
       const apptRes = await fetch(`${API}/api/appointments/patient/${user.id}`);
       const apptData = await apptRes.json();
       if (apptData.success) {
@@ -466,6 +452,33 @@ export function PatientProvider({ children }: { children: ReactNode }) {
         const upPastD = upcoming.filter((a: any) => apptMs2(a) < now2).filter(inCM).map((a: any) => new Date(a.date).getDate());
         setScheduledPast([...new Set([...pastD, ...upPastD])]);
       }
+    } catch (err) {
+      console.error("Failed to refresh appointments", err);
+    }
+  };
+
+  const confirmAppt = async () => {
+    if (!selectedDoc || !apptDate || !selectedSlot) return;
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return;
+    const user = JSON.parse(userStr);
+    setBookingLoading(true); setBookingError("");
+    try {
+      const res = await fetch(`${API}/api/doctor/book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: user.id, patientName: user.name,
+          patientEmail: user.email || localStorage.getItem("userEmail") || "",
+          doctorId: selectedDoc.doctorId, doctorName: selectedDoc.name,
+          hospital: selectedDoc.hospital, date: apptDate, timeSlot: selectedSlot
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+
+      // Re-fetch appointments from DB to ensure persistence
+      await refreshAppointments();
 
       setMessages((prev: any[]) => [{ id: Date.now(), type:"appointment", text:`Appointment booked with ${selectedDoc.name} on ${formatDate(apptDate)} at ${selectedSlot}`, date:"Just Now", isNew:true }, ...prev]);
       setApptStep(2);
@@ -512,7 +525,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       editBloodGroup, setEditBloodGroup, editProfilePicture, setEditProfilePicture,
       editSaving, setEditSaving,
       handleLogout, confirmLogout, openAppt, fetchSlots, confirmAppt,
-      markOneRead, markAllRead, formatDate, calcAge, MOCK_MEDS, CITY_DATA, today,
+      markOneRead, markAllRead, setMessages, refreshAppointments, formatDate, calcAge, MOCK_MEDS, CITY_DATA, today,
     }}>
       {children}
     </PatientContext.Provider>
