@@ -4,6 +4,7 @@ import { matchDoctorAI } from '../utils/doctorMatcher';
 import { simplifyReportAI } from '../utils/reportSimplifier';
 import { storeSymptomCheck } from '../utils/memoryService';
 import { sanitizeForAI } from '../utils/aiSanitizer';
+import { generateFollowUpQuestionsAI } from '../utils/followUpQuestions';
 import {
   buildEnrichedPrompt,
   logInteraction,
@@ -36,8 +37,9 @@ export const checkSymptoms = async (req: Request, res: Response): Promise<void> 
       patientHistory = await buildEnrichedPrompt(userId, symptoms, 'symptom_check');
     }
 
-    // ── Call AI with sanitized + enriched prompt ──
-    const result = await checkSymptomsAI(symptoms, patientHistory || undefined);
+    // ── Call AI with sanitized + enriched prompt + follow-up answers ──
+    const answers: { question: string; answer: string }[] = Array.isArray(req.body.answers) ? req.body.answers : [];
+    const result = await checkSymptomsAI(symptoms, patientHistory || undefined, answers.length > 0 ? answers : undefined);
 
     // ── Store in Hindsight memory ──
     if (userId) {
@@ -207,5 +209,27 @@ export const getHealthReport = async (req: Request, res: Response): Promise<void
   } catch (error: any) {
     console.error('[AI] getHealthReport error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to generate health report', error: error.message });
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GENERATE FOLLOW-UP QUESTIONS — step 1 of 2-pass symptom flow
+═══════════════════════════════════════════════════════════════════════════ */
+
+export const generateQuestions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { symptoms } = req.body;
+
+    if (!symptoms || typeof symptoms !== 'string' || symptoms.trim() === '') {
+      res.status(400).json({ success: false, message: '"symptoms" is required and must be a non-empty string' });
+      return;
+    }
+
+    const questions = await generateFollowUpQuestionsAI(symptoms.trim());
+
+    res.status(200).json({ success: true, questions });
+  } catch (error: any) {
+    console.error('[AI] generateQuestions error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to generate follow-up questions', error: error.message });
   }
 };

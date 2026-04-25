@@ -12,12 +12,21 @@ export interface SymptomCheckResult {
 export async function checkSymptomsAI(
   symptoms: string,
   patientHistory?: string,
+  answers?: { question: string; answer: string }[],
 ): Promise<SymptomCheckResult> {
   const historyBlock = patientHistory
     ? `\n\n${patientHistory}\n\nConsider the patient's medical history when analyzing current symptoms.\nIf you detect a pattern of worsening or recurring symptoms, flag this in your explanation.\n`
     : '';
 
-  const prompt = `You are a medical AI assistant. A patient reports the following symptoms: "${symptoms}"${historyBlock}
+  // Build follow-up answers block if provided
+  const answersBlock =
+    answers && answers.length > 0
+      ? `\n\nThe patient also answered these follow-up questions:\n${answers
+          .map((a, i) => `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer || '(skipped)'}`)
+          .join('\n')}\n\nUse these answers to improve accuracy of your analysis.\n`
+      : '';
+
+  const prompt = `You are a medical AI assistant. A patient reports the following symptoms: "${symptoms}"${historyBlock}${answersBlock}
 
 Analyze these symptoms and respond ONLY with a valid JSON object (no markdown, no code blocks) in this exact format:
 {
@@ -32,7 +41,8 @@ Rules:
 - severity 4-6: moderate, monitor closely
 - severity 7-10: severe, consult a doctor immediately
 - recommendation must be exactly 'home' or 'consult'
-- If patient history is provided, reference relevant past events in your explanation`;
+- If patient history is provided, reference relevant past events in your explanation
+- If follow-up answers are provided, factor them into severity and explanation`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
