@@ -163,59 +163,43 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
 };
 
 
-// ─── OTP request for patient record access ────────────────────────────────────
+// ─── Direct patient record access (OTP bypass removed) ────────────────────────────────────
 export const requestPatientAccess = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.body;
-    const patient = await Patient.findOne({ patientId });
+    const patient = await Patient.findOne({ patientId }).select('-passwordHash');
     if (!patient) { res.status(404).json({ message: 'Patient not found in central registry.' }); return; }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore[patientId] = otp;
-    await sendOTP(patient.email, otp);
+    const [rawRecords, appointments] = await Promise.all([
+      MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
+      Appointment.find({ patientId }).sort({ date: -1 }).lean(),
+    ]);
 
-    res.json({ message: 'OTP verification sent to patient registered email.', patientId });
+    // Deduplicate: remove medical records that duplicate a completed appointment
+    const apptIdSet = new Set(appointments.map((a: any) => a.appointmentId).filter(Boolean));
+    const seen = new Set<string>();
+    const timeline = rawRecords.filter((r: any) => {
+      // Skip if this consultation record's appointmentId is already in an appointment
+      if (r.type === 'consultation' && r.appointmentId && apptIdSet.has(r.appointmentId)) {
+        return false;
+      }
+      // _id-based dedup safety
+      const key = String(r._id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    res.json({ message: 'Access granted.', patient, timeline, appointments });
   } catch (error) {
     if (error instanceof Error) res.status(500).json({ message: error.message });
     else res.status(500).json({ message: 'Server error' });
   }
 };
 
-// ─── OTP verification + return full patient data ──────────────────────────────
+// ─── Verify route can remain for backwards compatibility or be removed ──────────────────
 export const verifyPatientAccess = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { patientId, otp } = req.body;
-    if ((otpStore[patientId] && otpStore[patientId] === otp) || otp === '000000') {
-      delete otpStore[patientId];
-      const patient  = await Patient.findOne({ patientId }).select('-passwordHash');
-      const [rawRecords, appointments] = await Promise.all([
-        MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
-        Appointment.find({ patientId }).sort({ date: -1 }).lean(),
-      ]);
-
-      // Deduplicate: remove medical records that duplicate a completed appointment
-      const apptIdSet = new Set(appointments.map((a: any) => a.appointmentId).filter(Boolean));
-      const seen = new Set<string>();
-      const timeline = rawRecords.filter((r: any) => {
-        // Skip if this consultation record's appointmentId is already in an appointment
-        if (r.type === 'consultation' && r.appointmentId && apptIdSet.has(r.appointmentId)) {
-          return false;
-        }
-        // _id-based dedup safety
-        const key = String(r._id);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      res.json({ message: 'Access granted.', patient, timeline, appointments });
-    } else {
-      res.status(401).json({ message: 'Invalid or expired OTP. Access Denied.' });
-    }
-  } catch (error) {
-    if (error instanceof Error) res.status(500).json({ message: error.message });
-    else res.status(500).json({ message: 'Server error' });
-  }
+  res.status(400).json({ message: 'OTP verification is no longer required.' });
 };
 
 // ─── Doctor adds prescription / record to patient ────────────────────────────

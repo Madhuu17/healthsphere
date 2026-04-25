@@ -204,7 +204,7 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
 
   const totalApptThisWeek = weekDates.reduce((acc, d) => acc + getSlotsForDay(d).length, 0);
 
-  // Patient OTP access
+  // Patient OTP access (now direct access)
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setAccessLoading(true); setAccessError("");
@@ -215,21 +215,7 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      setAccessStep("otp");
-    } catch (err: any) { setAccessError(err.message); }
-    finally { setAccessLoading(false); }
-  };
-
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAccessLoading(true); setAccessError("");
-    try {
-      const res = await fetch(`${API}/api/doctor/verify`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: searchId, otp: otp.join("") })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      
       setPatientData(data.patient);
 
       // Fetch the SAME merged timeline that the patient sees
@@ -245,6 +231,11 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       setAccessStep("view");
     } catch (err: any) { setAccessError(err.message); }
     finally { setAccessLoading(false); }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // This function is no longer needed since OTP verification is removed.
   };
 
   // Add record (prescription or other)

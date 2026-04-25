@@ -227,7 +227,7 @@ function TimelineEntry({ entry, formatDate }: { entry: any; formatDate: (d: any)
 export default function DoctorPatientRecords() {
   const ctx = useDoctor();
   const {
-    searchId, setSearchId, otp, setOtp, accessStep, setAccessStep,
+    searchId, setSearchId, accessStep, setAccessStep,
     accessError, setAccessError, accessLoading, patientData, setPatientData,
     patientTimeline, handleSearch, handleVerify, formatDate,
     showAddRecord, setShowAddRecord, newRecord, setNewRecord,
@@ -246,7 +246,7 @@ export default function DoctorPatientRecords() {
             <Search size={32} className="text-blue-500"/>
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Access Patient Records</h2>
-          <p className="text-slate-500 mb-8 text-sm max-w-sm mx-auto">Enter the Patient ID to initiate a secure OTP-gated access request.</p>
+          <p className="text-slate-500 mb-8 text-sm max-w-sm mx-auto">Enter the Patient ID to securely access patient records.</p>
           <form onSubmit={handleSearch} className="flex gap-3 max-w-sm mx-auto">
             <input type="text" value={searchId} onChange={e => setSearchId(e.target.value)} required
               placeholder="PID-XXXXX"
@@ -260,36 +260,7 @@ export default function DoctorPatientRecords() {
         </motion.div>
       )}
 
-      {/* OTP Step */}
-      {accessStep === "otp" && (
-        <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
-          className="bg-white rounded-3xl p-10 shadow-sm border border-slate-100 max-w-sm mx-auto text-center">
-          <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <KeyRound size={28}/>
-          </div>
-          <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Patient Consent OTP</h2>
-          <p className="text-slate-500 text-sm mb-6">OTP sent to patient. Dev bypass: <code className="bg-slate-100 px-1.5 rounded font-mono text-xs">000000</code></p>
-          <form onSubmit={handleVerify} className="space-y-6">
-            <div className="flex justify-between gap-2">
-              {otp.map((d: string, idx: number) => (
-                <input key={idx} id={`otp-${idx}`} type="text" maxLength={1} value={d}
-                  onChange={e => {
-                    const n = [...otp]; n[idx] = e.target.value; setOtp(n);
-                    if (e.target.value && idx < 5) document.getElementById(`otp-${idx+1}`)?.focus();
-                  }}
-                  className="w-12 h-14 text-center text-2xl font-bold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"/>
-              ))}
-            </div>
-            {accessError && <p className="text-red-500 text-sm">{accessError}</p>}
-            <button type="submit" disabled={accessLoading}
-              className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 disabled:bg-slate-700">
-              <CheckCircle2 size={18}/>{accessLoading ? "Verifying..." : "Verify & Access"}
-            </button>
-            <button type="button" onClick={() => { setAccessStep("search"); setAccessError(""); }}
-              className="text-slate-500 text-sm hover:text-slate-700">← Back</button>
-          </form>
-        </motion.div>
-      )}
+
 
       {/* Patient View */}
       {accessStep === "view" && patientData && (
@@ -320,7 +291,7 @@ export default function DoctorPatientRecords() {
                   className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-600/20">
                   <Plus size={16}/> Add Record
                 </button>
-                <button onClick={() => { setAccessStep("search"); setPatientData(null); setOtp(["","","","","",""]); setSearchId(""); }}
+                <button onClick={() => { setAccessStep("search"); setPatientData(null); setSearchId(""); }}
                   className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-200">Close</button>
               </div>
             </div>
