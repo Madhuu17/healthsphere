@@ -38,6 +38,7 @@ import notificationRoutes  from './routes/notificationRoutes';
 import dietPlanRoutes      from './routes/dietPlanRoutes';
 import prescriptionRoutes  from './routes/prescriptionRoutes';
 import reminderRoutes      from './routes/reminderRoutes';
+import voiceBookingRoutes  from './routes/voiceBookingRoutes';
 
 app.use('/api/auth',            authRoutes);
 app.use('/api/patients',        patientRoutes);
@@ -49,6 +50,7 @@ app.use('/api/notifications',   notificationRoutes);
 app.use('/api/diet-plans',      dietPlanRoutes);
 app.use('/api/prescriptions',   prescriptionRoutes);
 app.use('/api/reminders',       reminderRoutes);
+app.use('/api/voice-booking',   voiceBookingRoutes);
 
 const PORT = process.env.PORT || 5000;
 

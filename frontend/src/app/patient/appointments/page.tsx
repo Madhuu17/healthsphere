@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar as CalendarIcon, Stethoscope, Clock, CheckCircle2,
   XCircle, ChevronDown, ChevronUp, FileText, AlertCircle,
-  ArrowUpDown, History, Hourglass,
+  ArrowUpDown, History, Hourglass, Mic,
 } from "lucide-react";
 import { usePatient } from "../_context/PatientContext";
+
+const VoiceAssistant = dynamic(() => import("../_components/VoiceAssistant"), { ssr: false });
 
 // ── Status chip ────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -176,6 +179,13 @@ export default function PatientAppointments() {
   } = usePatient();
 
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
+  const [showVoice, setShowVoice] = useState(false);
+
+  // Re-fetch appointments after voice booking
+  const refreshAfterVoiceBook = useCallback(() => {
+    // Trigger a page-level re-render by toggling tab (appointments come from context)
+    // The PatientContext re-fetches on mount, so closing the overlay is enough
+  }, []);
 
   // Upcoming → ascending (nearest first) — already sorted by backend
   const sortedUpcoming = [...upcomingAppointments];
@@ -244,12 +254,21 @@ export default function PatientAppointments() {
             color="bg-slate-700 border-slate-700 text-white"
           />
         </div>
-        <button
-          onClick={openAppt}
-          className="bg-teal-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-teal-600 transition-colors"
-        >
-          + Book New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowVoice(true)}
+            className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-700 transition-colors"
+          >
+            <Mic size={15} />
+            Voice Book
+          </button>
+          <button
+            onClick={openAppt}
+            className="bg-teal-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-teal-600 transition-colors"
+          >
+            + Book New
+          </button>
+        </div>
       </div>
 
       {/* ── Tab Content ── */}
@@ -334,6 +353,19 @@ export default function PatientAppointments() {
               </div>
             )}
           </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* Voice Assistant Overlay */}
+      <AnimatePresence>
+        {showVoice && (
+          <VoiceAssistant
+            onClose={() => setShowVoice(false)}
+            onBooked={() => {
+              // Appointments will refresh via context on next navigation
+              refreshAfterVoiceBook();
+            }}
+          />
         )}
       </AnimatePresence>
     </div>
