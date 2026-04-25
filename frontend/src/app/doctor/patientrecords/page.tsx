@@ -3,224 +3,179 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, KeyRound, CheckCircle2, X, Plus, Pill, FileText, Clock,
+  Search, X, Plus, Pill, FileText, CheckCircle2,
   AlertCircle, Image as ImageIcon, Paperclip, Send, Stethoscope,
-  BarChart2, Heart, Trash2, Timer, Calendar as CalendarIcon,
-  ChevronDown, ChevronUp, Eye, User
+  Trash2, Timer, Calendar as CalendarIcon,
+  User, Building2, Download, Eye
 } from "lucide-react";
 import { useDoctor } from "../_context/DoctorContext";
 
-// ── Entry type → display meta (identical to patient timeline) ──────────────
+// ── Type badge colours ───────────────────────────────────────────────────
 const TYPE_META: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
-  consultation:  { color: "text-teal-700",   bg: "bg-teal-50",    border: "border-teal-200",   icon: Stethoscope,  label: "Consultation" },
-  appointment:   { color: "text-cyan-700",   bg: "bg-cyan-50",    border: "border-cyan-200",   icon: CalendarIcon, label: "Appointment" },
-  prescription:  { color: "text-violet-700", bg: "bg-violet-50",  border: "border-violet-200", icon: Pill,         label: "Prescription" },
-  lab_report:    { color: "text-red-700",    bg: "bg-red-50",     border: "border-red-200",    icon: BarChart2,    label: "Lab Report" },
-  xray:          { color: "text-blue-700",   bg: "bg-blue-50",    border: "border-blue-200",   icon: ImageIcon,    label: "X-Ray / Scan" },
-  report:        { color: "text-orange-700", bg: "bg-orange-50",  border: "border-orange-200", icon: FileText,     label: "Report" },
-  vaccination:   { color: "text-green-700",  bg: "bg-green-50",   border: "border-green-200",  icon: Heart,        label: "Vaccination" },
+  consultation: { color: "text-teal-700",   bg: "bg-teal-50",   border: "border-teal-200",   icon: Stethoscope, label: "Consultation" },
+  appointment:  { color: "text-cyan-700",   bg: "bg-cyan-50",   border: "border-cyan-200",   icon: CalendarIcon, label: "Appointment" },
+  prescription: { color: "text-violet-700", bg: "bg-violet-50", border: "border-violet-200", icon: Pill,         label: "Prescription" },
+  lab_report:   { color: "text-red-700",    bg: "bg-red-50",    border: "border-red-200",    icon: FileText,     label: "Lab Report" },
+  xray:         { color: "text-blue-700",   bg: "bg-blue-50",   border: "border-blue-200",   icon: Eye,          label: "X-Ray / Scan" },
+  report:       { color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200", icon: FileText,     label: "Report" },
+  vaccination:  { color: "text-green-700",  bg: "bg-green-50",  border: "border-green-200",  icon: FileText,     label: "Vaccination" },
 };
 const DEFAULT_META = TYPE_META.consultation;
 
-// ── Single timeline entry (identical to patient timeline) ──────────────────
-function TimelineEntry({ entry, formatDate }: { entry: any; formatDate: (d: any) => string }) {
-  const [open, setOpen] = useState(false);
-  const meta = TYPE_META[entry.category] || DEFAULT_META;
-  const Icon = meta.icon;
+function isImg(url: string) { return /\.(jpg|jpeg|png|gif|webp)$/i.test(url); }
 
-  const hasDetails =
-    entry.diagnosis ||
-    entry.reportUrl ||
-    (entry.attachments?.length > 0) ||
-    entry.imageUrl ||
-    entry.description ||
-    entry.notes ||
-    (entry.medicines?.length > 0);
+// ── Record Detail Modal ───────────────────────────────────────────────
+function RecordDetailModal({ entry, formatDate, onClose }: { entry: any; formatDate: (d:any)=>string; onClose: ()=>void }) {
+  const meta = TYPE_META[entry.type || entry.category] || DEFAULT_META;
+  const allFiles: { url: string; label: string; docType: string }[] = [];
+  (entry.documents || []).forEach((d: any) => allFiles.push({ url: d.fileUrl, label: d.label || d.type, docType: d.type }));
+  (entry.attachments || []).forEach((url: string, i: number) => allFiles.push({ url, label: `File ${i+1}`, docType: "other" }));
+
+  const sections = [
+    { label: "Prescriptions",  items: allFiles.filter(a => a.docType === "prescription") },
+    { label: "X-Rays / Scans", items: allFiles.filter(a => a.docType === "xray") },
+    { label: "Lab Reports",    items: allFiles.filter(a => a.docType === "blood_report") },
+    { label: "Other Files",    items: allFiles.filter(a => a.docType === "other") },
+  ].filter(s => s.items.length > 0);
+  if (!sections.length && allFiles.length) sections.push({ label: "Files", items: allFiles });
 
   return (
-    <div className="flex gap-4 relative group">
-      {/* Timeline dot */}
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 -ml-10 relative z-10 shadow-md ${meta.bg} ${meta.color} border ${meta.border}`}>
-        <Icon size={16} />
-      </div>
-
-      {/* Card */}
-      <div className={`flex-1 bg-white rounded-2xl border shadow-sm transition-all overflow-hidden ${
-        open ? `border-2 ${meta.border}` : "border-slate-100 hover:border-slate-200 hover:shadow-md"
-      } group-hover:-translate-y-0.5`}>
-        {/* Top colour strip */}
-        <div className={`h-0.5 w-full ${meta.bg.replace("50", "200")}`} />
-
-        <div className="p-5">
-          {/* Header row */}
-          <div className="flex items-start justify-between gap-2 mb-3">
-            <div className="min-w-0">
-              <p className="font-bold text-slate-800 text-sm truncate">{entry.title}</p>
-              {entry.doctorName && (
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {entry.doctorName.replace(/^Dr\.?\s*/i, "Dr. ")}
-                  {entry.hospital ? ` · ${entry.hospital}` : ""}
-                </p>
-              )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} exit={{opacity:0,scale:0.95}}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
+        <div className={`px-7 py-5 flex items-center gap-4 ${meta.bg}`}>
+          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${meta.bg} ${meta.color} border ${meta.border} shadow shrink-0`}>
+            <meta.icon size={18}/>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[10px] font-black uppercase tracking-widest ${meta.color}`}>{meta.label}</p>
+            <h3 className="text-lg font-black text-slate-800 truncate">{entry.title}</h3>
+            <div className="flex flex-wrap gap-3 mt-0.5 text-xs text-slate-500 font-semibold">
+              {entry.doctorName   && <span className="flex items-center gap-1"><User size={10}/>{entry.doctorName}</span>}
+              {entry.hospitalName && <span className="flex items-center gap-1"><Building2 size={10}/>{entry.hospitalName}</span>}
+              <span className="flex items-center gap-1"><CalendarIcon size={10}/>{formatDate(entry.date || entry.createdAt)}</span>
             </div>
-            <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${meta.bg} ${meta.color}`}>
-              {meta.label}
-            </span>
           </div>
+          <button onClick={onClose} className="w-9 h-9 bg-white rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition shadow shrink-0"><X size={18}/></button>
+        </div>
 
-          {/* Date + Time row */}
-          <div className="flex items-center gap-4 text-xs text-slate-500 font-semibold mb-3">
-            <span className="flex items-center gap-1.5">
-              <CalendarIcon size={11} className="text-slate-400" />
-              {formatDate(entry.date)}
-            </span>
-            {entry.timeSlot && (
-              <span className="flex items-center gap-1.5">
-                <Clock size={11} className="text-slate-400" />
-                {entry.timeSlot}
-              </span>
-            )}
-          </div>
-
-          {/* Status for appointments */}
-          {entry.entryType === "appointment" && entry.status && (
-            <span className={`inline-flex text-[10px] font-black uppercase px-2.5 py-1 rounded-full mb-3 ${
-              entry.status === "completed" ? "bg-green-100 text-green-700" :
-              entry.status === "cancelled" ? "bg-red-100 text-red-600" :
-              "bg-teal-100 text-teal-700"
-            }`}>{entry.status}</span>
+        <div className="flex-1 overflow-y-auto p-7 space-y-6">
+          {(entry.diagnosis || entry.description) && (
+            <div className={`rounded-2xl p-4 border ${meta.border} ${meta.bg}`}>
+              <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${meta.color}`}>{entry.diagnosis ? "Diagnosis" : "Notes"}</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{entry.diagnosis || entry.description}</p>
+            </div>
           )}
 
-          {/* Expand / collapse button */}
-          {hasDetails && (
-            <button
-              onClick={() => setOpen(!open)}
-              className={`w-full flex items-center justify-between text-xs font-bold border-t border-slate-100 pt-3 transition-colors ${
-                open ? `${meta.color}` : "text-slate-400 hover:text-slate-700"
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <Eye size={13} />
-                {open ? "Collapse" : (entry.entryType === "appointment" ? "View Diagnosis & Report" : "View Details")}
-              </span>
-              {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
+          {entry.medicines?.length > 0 && (
+            <div>
+              <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">💊 Medicines</p>
+              <div className="space-y-2">
+                {entry.medicines.map((m: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Pill size={13} className="text-violet-500 shrink-0"/>
+                      <span className="text-sm font-bold text-slate-800">{m.name || m.medicineName}</span>
+                      {m.type && <span className="text-[10px] bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full font-bold capitalize">{m.type}</span>}
+                    </div>
+                    <p className="text-xs text-violet-700 font-semibold shrink-0 ml-2">
+                      {[m.dosage, m.frequency, m.duration ? m.duration : m.durationDays ? m.durationDays+"d" : null].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
-          {/* Expandable body */}
-          <AnimatePresence>
-            {open && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="pt-4 space-y-3">
-                  {/* Description / notes */}
-                  {entry.description && (
-                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes</p>
-                      <p className="text-xs text-slate-700 leading-relaxed">{entry.description}</p>
+          {sections.length > 0 ? sections.map(sec => (
+            <div key={sec.label}>
+              <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">📎 {sec.label}</p>
+              <div className="grid grid-cols-2 gap-3">
+                {sec.items.map((item, i) => isImg(item.url) ? (
+                  <div key={i} className="relative group rounded-2xl overflow-hidden border border-slate-200">
+                    <img src={item.url} alt={item.label} className="w-full h-36 object-cover"/>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                      <a href={item.url} target="_blank" rel="noreferrer" className="p-2 bg-white rounded-xl"><Eye size={16} className="text-slate-700"/></a>
+                      <a href={item.url} download className="p-2 bg-white rounded-xl"><Download size={16} className="text-slate-700"/></a>
                     </div>
-                  )}
-
-                  {/* Prescription notes */}
-                  {entry.notes && !entry.description && (
-                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Doctor&apos;s Notes</p>
-                      <p className="text-xs text-slate-700 leading-relaxed">{entry.notes}</p>
+                    <p className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[10px] px-2 py-1 font-semibold truncate">{item.label}</p>
+                  </div>
+                ) : (
+                  <div key={i} className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+                    <FileText size={18} className="text-blue-500 shrink-0"/>
+                    <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{item.label}</span>
+                    <div className="flex gap-1">
+                      <a href={item.url} target="_blank" rel="noreferrer" className="p-1.5 hover:bg-slate-200 rounded-lg"><Eye size={13} className="text-slate-500"/></a>
+                      <a href={item.url} download className="p-1.5 hover:bg-slate-200 rounded-lg"><Download size={13} className="text-slate-500"/></a>
                     </div>
-                  )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )) : (
+            <div className="text-center py-8 text-slate-400 text-sm">
+              <FileText size={36} className="mx-auto mb-3 text-slate-200"/>
+              No documents attached.
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
-                  {/* Medicines list (prescriptions) */}
-                  {entry.medicines?.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Medicines</p>
-                      <div className="space-y-2">
-                        {entry.medicines.map((med: any, j: number) => (
-                          <div
-                            key={j}
-                            className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Pill size={13} className="text-violet-500 shrink-0" />
-                              <span className="text-xs font-bold text-slate-800 truncate">{med.medicineName}</span>
-                            </div>
-                            <span className="ml-3 shrink-0 text-xs font-semibold text-violet-700 bg-white border border-violet-200 px-2.5 py-1 rounded-lg">
-                              {med.dosage}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+// ── EHR Card ────────────────────────────────────────────────────────────────────
+function EHRCard({ entry, formatDate, onClick }: { entry: any; formatDate:(d:any)=>string; onClick:()=>void }) {
+  const meta = TYPE_META[entry.type || entry.category] || DEFAULT_META;
+  const meds: any[] = entry.medicines || [];
+  const attachCount = (entry.documents?.length || 0) + (entry.attachments?.length || 0);
 
-                  {/* Diagnosis (appointments) */}
-                  {entry.entryType === "appointment" && (
-                    <div className={`${meta.bg} border ${meta.border} rounded-xl p-3`}>
-                      <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${meta.color}`}>Diagnosis</p>
-                      <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                        {entry.diagnosis || "No diagnosis recorded yet."}
-                      </p>
-                    </div>
-                  )}
+  return (
+    <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:0.97}}
+      onClick={onClick}
+      className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200 hover:-translate-y-0.5 transition-all cursor-pointer overflow-hidden group"
+    >
+      <div className={`h-1 w-full ${meta.bg.replace("50","200")}`}/>
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${meta.bg} ${meta.color} shrink-0`}><meta.icon size={16}/></div>
+            <div className="min-w-0">
+              <h4 className="font-bold text-slate-800 text-sm truncate max-w-[210px]">{entry.title}</h4>
+              <p className="text-[10px] text-slate-500 font-semibold mt-0.5">{formatDate(entry.date || entry.createdAt)}</p>
+            </div>
+          </div>
+          <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${meta.bg} ${meta.color}`}>{meta.label}</span>
+        </div>
 
-                  {/* Report URL (appointment) */}
-                  {entry.entryType === "appointment" && (
-                    entry.reportUrl ? (
-                      <a
-                        href={entry.reportUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg border ${meta.border} ${meta.color} ${meta.bg} hover:opacity-80 transition-opacity`}
-                      >
-                        <FileText size={13} /> View Report / File
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
-                        <AlertCircle size={11} /> No report attached
-                      </div>
-                    )
-                  )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 font-semibold mb-3">
+          {entry.doctorName   && <span className="flex items-center gap-1"><User size={11} className="text-slate-400"/>{entry.doctorName}</span>}
+          {entry.hospitalName && <span className="flex items-center gap-1"><Building2 size={11} className="text-slate-400"/>{entry.hospitalName}</span>}
+        </div>
 
-                  {/* Attachments (records) */}
-                  {entry.attachments?.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Attachments</p>
-                      <div className="flex flex-wrap gap-2">
-                        {entry.attachments.map((url: string, j: number) => (
-                          <a key={j} href={url} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
-                            <FileText size={11} /> View File {j + 1}
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+        {(entry.diagnosis || entry.description) && (
+          <p className="text-xs text-slate-600 line-clamp-2 mb-3 leading-relaxed">🩺 {entry.diagnosis || entry.description}</p>
+        )}
 
-                  {/* Image preview (for scan/xray records) */}
-                  {entry.imageUrl && (
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Image / Scan</p>
-                      <img
-                        src={entry.imageUrl} alt="Medical scan"
-                        className="w-full max-h-48 rounded-xl object-cover border border-slate-100"
-                      />
-                      <a href={entry.imageUrl} target="_blank" rel="noreferrer"
-                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-teal-700 transition-colors">
-                        <Eye size={11} /> View Full Size
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {meds.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {meds.slice(0,3).map((m:any, i:number) => (
+              <span key={i} className="flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-100 px-2 py-0.5 rounded-full">
+                <Pill size={9}/>{m.name || m.medicineName}
+              </span>
+            ))}
+            {meds.length > 3 && <span className="text-[10px] text-slate-400 font-bold">+{meds.length-3} more</span>}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-2.5 border-t border-slate-50">
+          <span className="text-[10px] text-slate-400">
+            {attachCount > 0 ? `📎 ${attachCount} file${attachCount>1?"s":""}` : "No attachments"}
+          </span>
+          <span className="text-[10px] font-bold text-blue-600 group-hover:underline flex items-center gap-0.5">View Details <Eye size={10}/></span>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -241,6 +196,7 @@ export default function DoctorPatientRecords() {
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; type: "single" | "bulk"; targetId?: string }>({ open: false, type: "single" });
   const [deleting, setDeleting] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
 
   // Filter and Sort Alphabetically
   const filteredPatients = savedPatients
@@ -568,11 +524,6 @@ export default function DoctorPatientRecords() {
                                 className="w-full px-3 py-2 border border-purple-200 bg-purple-50/50 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/30 text-sm font-bold text-purple-700"/>
                             </div>
                           </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 mb-1">Instructions (optional)</label>
-                            <input type="text" value={med.instructions} onChange={e => updateMed(idx, "instructions", e.target.value)} placeholder="e.g. Take with food"
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-medium"/>
-                          </div>
                         </div>
                       ))}
                       <button onClick={addMed}
@@ -662,48 +613,57 @@ export default function DoctorPatientRecords() {
             )}
           </AnimatePresence>
 
-          {/* Patient Timeline */}
+          {/* EHR Record Cards */}
           <div className="bg-white rounded-3xl p-7 shadow-sm border border-slate-100">
             <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2 text-base">
-              <Clock size={18} className="text-blue-600"/> Medical History & Timeline
+              <FileText size={18} className="text-blue-600"/> Medical History
+              <span className="ml-auto text-xs font-semibold text-slate-400">{patientTimeline.length} record{patientTimeline.length !== 1 ? "s" : ""}</span>
             </h3>
             {patientTimeline.length === 0 ? (
-              <div className="text-center py-10">
+              <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-2xl">
                 <FileText size={40} className="mx-auto text-slate-200 mb-3"/>
                 <p className="text-slate-400 text-sm">No records yet. Add the first record above.</p>
               </div>
             ) : (
-              <div className="relative pl-10">
-                {/* Vertical line */}
-                <div className="absolute left-[19px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-teal-300 via-slate-200 to-slate-100 rounded-full" />
-                <div className="space-y-5">
-                  <AnimatePresence>
-                    {(() => {
-                      const seen = new Set<string>();
-                      return patientTimeline.filter((r: any) => {
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <AnimatePresence>
+                  {(() => {
+                    const seen = new Set<string>();
+                    return [...patientTimeline]
+                      .sort((a: any, b: any) => new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime())
+                      .filter((r: any) => {
                         const key = r._id || r.appointmentId || `${r.title}-${r.date}`;
                         if (seen.has(key)) return false;
                         seen.add(key);
                         return true;
-                      }).map((entry: any, i: number) => (
-                        <motion.div
-                          key={entry._id || entry.appointmentId || i}
-                          initial={{ opacity: 0, x: -12 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -12 }}
-                          transition={{ delay: i * 0.03 }}
-                        >
-                          <TimelineEntry entry={entry} formatDate={formatDate} />
-                        </motion.div>
+                      })
+                      .map((entry: any) => (
+                        <EHRCard
+                          key={entry._id || entry.appointmentId || entry.title}
+                          entry={entry}
+                          formatDate={formatDate}
+                          onClick={() => setSelectedRecord(entry)}
+                        />
                       ));
-                    })()}
-                  </AnimatePresence>
-                </div>
+                  })()}
+                </AnimatePresence>
               </div>
             )}
           </div>
+
+          {/* Record Detail Modal */}
+          <AnimatePresence>
+            {selectedRecord && (
+              <RecordDetailModal
+                entry={selectedRecord}
+                formatDate={formatDate}
+                onClose={() => setSelectedRecord(null)}
+              />
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
     </div>
   );
 }
+

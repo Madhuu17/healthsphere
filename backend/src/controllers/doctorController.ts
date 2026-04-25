@@ -275,7 +275,10 @@ export const bulkRemoveSavedPatients = async (req: Request, res: Response): Prom
 // ─── Doctor adds prescription / record to patient ────────────────────────────
 export const addPatientRecord = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { patientId, doctorId, doctorName, type, title, description, date } = req.body;
+    const {
+      patientId, doctorId, doctorName, hospitalName, type, title, description, date,
+      diagnosis, medicines, documents,
+    } = req.body;
     const patient = await Patient.findOne({ patientId });
     if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
 
@@ -285,13 +288,34 @@ export const addPatientRecord = async (req: Request, res: Response): Promise<voi
       ? files.map(f => `http://localhost:5000/uploads/${f.filename}`)
       : (req.body.attachments ? (Array.isArray(req.body.attachments) ? req.body.attachments : [req.body.attachments]) : []);
 
+    // Parse medicines and documents if they arrive as JSON strings
+    let parsedMedicines: any[] = [];
+    let parsedDocuments: any[] = [];
+    try { parsedMedicines = typeof medicines === 'string' ? JSON.parse(medicines) : (medicines || []); } catch {}
+    try { parsedDocuments = typeof documents === 'string' ? JSON.parse(documents) : (documents || []); } catch {}
+
+    // Build document entries from file uploads (mark as prescription/xray/etc based on type)
+    if (files && files.length > 0) {
+      files.forEach(f => {
+        const fileUrl = `http://localhost:5000/uploads/${f.filename}`;
+        const docType = type === 'xray' ? 'xray' : type === 'lab_report' ? 'blood_report' : 'prescription';
+        parsedDocuments.push({ type: docType, fileUrl, label: title || f.originalname, uploadedAt: new Date() });
+      });
+    }
+
     const record = await MedicalRecord.create({
       patientId, doctorId,
-      type:        type || 'prescription',
+      doctorName:   doctorName || null,
+      hospitalName: hospitalName || null,
+      type:         type || 'prescription',
+      recordType:   type === 'prescription' ? 'prescription' : 'report',
       title,
-      description,
-      date:        date ? new Date(date) : new Date(),
-      attachments
+      description:  description || '',
+      date:         date ? new Date(date) : new Date(),
+      diagnosis:    diagnosis || null,
+      medicines:    parsedMedicines,
+      documents:    parsedDocuments,
+      attachments,
     });
 
     res.status(201).json({ message: 'Record added.', record });
