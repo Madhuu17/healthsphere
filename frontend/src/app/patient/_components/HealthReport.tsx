@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from "react";
 import {
-  Brain, Activity, AlertTriangle, Heart, Shield,
+  Brain, AlertTriangle, Heart, Shield,
   FileText, Pill, TrendingUp, RefreshCw, Sparkles,
-  ChevronRight,
 } from "lucide-react";
 import AIEvolution from "./AIEvolution";
 
 interface HealthReportData {
-  recurringIssues:  { pattern: string; count: number; confidence: string }[];
   riskIndicators:   { pattern: string; count: number; confidence: string }[];
   behaviorPatterns: { pattern: string; count: number; confidence: string }[];
   conditions:       string[];
@@ -87,7 +85,7 @@ export default function HealthReport({ userId }: HealthReportProps) {
 
   if (!report) return null;
 
-  const hasInsights = report.recurringIssues.length > 0 || report.riskIndicators.length > 0 || report.behaviorPatterns.length > 0;
+  const hasInsights = report.riskIndicators.length > 0 || report.behaviorPatterns.length > 0;
   const hasContext = report.conditions.length > 0 || report.medications.length > 0 || report.allergies.length > 0;
 
   return (
@@ -128,34 +126,6 @@ export default function HealthReport({ userId }: HealthReportProps) {
             Use the Symptom Checker, Diet Plan Generator, or upload medical records.
             The AI will learn from your interactions and build your health profile over time.
           </p>
-        </div>
-      )}
-
-      {/* Recurring Issues */}
-      {report.recurringIssues.length > 0 && (
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-amber-400 to-orange-400" />
-          <div className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Activity size={18} className="text-amber-600" />
-              <h3 className="text-base font-black text-slate-800">Recurring Issues</h3>
-              <span className="ml-auto text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                {report.recurringIssues.length} detected
-              </span>
-            </div>
-            <div className="space-y-2.5">
-              {report.recurringIssues.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 bg-gradient-to-r from-amber-50/50 to-transparent rounded-xl px-4 py-3 border border-amber-100/40">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${CONFIDENCE_DOT[item.confidence] || CONFIDENCE_DOT.low}`} />
-                  <span className="text-sm font-bold text-slate-800 capitalize flex-1">{item.pattern}</span>
-                  <span className="text-xs font-bold text-slate-500 bg-white border border-slate-100 px-2.5 py-1 rounded-lg">
-                    {item.count}× reported
-                  </span>
-                  <ChevronRight size={14} className="text-slate-300" />
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
