@@ -6,7 +6,7 @@ import {
   Search, KeyRound, CheckCircle2, X, Plus, Pill, FileText, Clock,
   AlertCircle, Image as ImageIcon, Paperclip, Send, Stethoscope,
   BarChart2, Heart, Trash2, Timer, Calendar as CalendarIcon,
-  ChevronDown, ChevronUp, Eye,
+  ChevronDown, ChevronUp, Eye, User
 } from "lucide-react";
 import { useDoctor } from "../_context/DoctorContext";
 
@@ -233,31 +233,95 @@ export default function DoctorPatientRecords() {
     showAddRecord, setShowAddRecord, newRecord, setNewRecord,
     uploading, attachedFiles, setAttachedFiles, fileRef, handleAddRecord,
     rxTitle, setRxTitle, rxNotes, setRxNotes, rxMeds, setRxMeds,
-    addMed, removeMed, updateMed, emptyMed,
+    addMed, removeMed, updateMed, emptyMed, savedPatients, openPatientRecords
   } = ctx;
+
+  const [filterQuery, setFilterQuery] = useState("");
+  const filteredPatients = savedPatients.filter((p: any) => 
+    p.name.toLowerCase().includes(filterQuery.toLowerCase())
+  );
 
   return (
     <div className="max-w-3xl space-y-5">
-      {/* Search Step */}
+      {/* Search & Add Step */}
       {accessStep === "search" && (
-        <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
-          className="bg-white rounded-3xl p-10 shadow-sm border border-slate-100 text-center">
-          <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-blue-50/30">
-            <Search size={32} className="text-blue-500"/>
-          </div>
-          <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Access Patient Records</h2>
-          <p className="text-slate-500 mb-8 text-sm max-w-sm mx-auto">Enter the Patient ID to securely access patient records.</p>
-          <form onSubmit={handleSearch} className="flex gap-3 max-w-sm mx-auto">
-            <input type="text" value={searchId} onChange={e => setSearchId(e.target.value)} required
-              placeholder="PID-XXXXX"
-              className="flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 outline-none font-bold tracking-wider text-center"/>
-            <button type="submit" disabled={accessLoading}
-              className="bg-blue-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-blue-700 disabled:bg-blue-400 transition-colors">
-              {accessLoading ? "..." : "Search"}
-            </button>
-          </form>
-          {accessError && <p className="text-red-500 text-sm mt-4 font-medium">{accessError}</p>}
-        </motion.div>
+        <div className="space-y-6">
+          {/* Add New Patient Card */}
+          <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
+            className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+            <div className="flex items-start gap-5">
+              <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
+                <Plus size={24} className="text-blue-500"/>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-slate-900 mb-1">Add Patient</h2>
+                <p className="text-slate-500 mb-5 text-sm">Enter the Patient ID to securely access and save patient records to your list.</p>
+                <form onSubmit={handleSearch} className="flex gap-3 max-w-sm">
+                  <input type="text" value={searchId} onChange={e => setSearchId(e.target.value)} required
+                    placeholder="PID-XXXXX"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 outline-none font-bold tracking-wider"/>
+                  <button type="submit" disabled={accessLoading}
+                    className="bg-blue-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-blue-700 disabled:bg-blue-400 transition-colors shadow-md shadow-blue-600/20">
+                    {accessLoading ? "..." : "Add"}
+                  </button>
+                </form>
+                {accessError && <p className="text-red-500 text-sm mt-3 font-medium">{accessError}</p>}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Saved Patients List */}
+          <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ delay: 0.1 }}
+            className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <User size={20} className="text-blue-600"/> Saved Patients
+              </h2>
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search by name..." 
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
+                  className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 outline-none text-sm font-medium w-64"
+                />
+              </div>
+            </div>
+
+            {savedPatients.length === 0 ? (
+              <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-2xl">
+                <User size={32} className="mx-auto text-slate-300 mb-3"/>
+                <p className="text-slate-500 font-medium">No saved patients yet.</p>
+                <p className="text-slate-400 text-sm mt-1">Add a patient using their PID above.</p>
+              </div>
+            ) : filteredPatients.length === 0 ? (
+              <div className="text-center py-10">
+                <p className="text-slate-500 font-medium">No patients found matching "{filterQuery}"</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {filteredPatients.map((p: any) => (
+                  <button 
+                    key={p.patientId}
+                    onClick={() => openPatientRecords(p.patientId)}
+                    className="flex flex-col items-start p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md hover:bg-blue-50/30 transition-all text-left group"
+                  >
+                    <div className="flex items-center justify-between w-full mb-2">
+                      <h3 className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{p.name}</h3>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                        {p.patientId}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                      Contact: {p.contactNumber || "N/A"}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </div>
       )}
 
 

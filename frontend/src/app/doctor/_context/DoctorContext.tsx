@@ -72,6 +72,10 @@ interface DoctorContextType {
   accessLoading: boolean;
   patientData: any; setPatientData: (v: any) => void;
   patientTimeline: any[]; setPatientTimeline: (v: any) => void;
+  savedPatients: any[]; setSavedPatients: (v: any) => void;
+  fetchSavedPatients: () => Promise<void>;
+  handleAddSavedPatient: (pid: string) => Promise<void>;
+  openPatientRecords: (pid: string) => Promise<void>;
   handleSearch: (e: React.FormEvent) => Promise<void>;
   handleVerify: (e: React.FormEvent) => Promise<void>;
   // Add Record
@@ -129,6 +133,7 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
   const [accessLoading, setAccessLoading] = useState(false);
   const [patientData, setPatientData] = useState<any>(null);
   const [patientTimeline, setPatientTimeline] = useState<any[]>([]);
+  const [savedPatients, setSavedPatients] = useState<any[]>([]);
 
   // Add Record
   const [showAddRecord, setShowAddRecord] = useState(false);
@@ -169,6 +174,15 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const fetchSavedPatients = useCallback(async () => {
+    if (!doctor) return;
+    try {
+      const res = await fetch(`${API}/api/doctor/saved-patients/${doctor.id}`);
+      const data = await res.json();
+      if (res.ok) setSavedPatients(data);
+    } catch {}
+  }, [doctor]);
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -190,8 +204,11 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setWeekDates(getWeekDates(weekOffset));
-    if (doctor) fetchSchedule(doctor.id, weekOffset);
-  }, [weekOffset, doctor]);
+    if (doctor) {
+      fetchSchedule(doctor.id, weekOffset);
+      fetchSavedPatients();
+    }
+  }, [weekOffset, doctor, fetchSavedPatients]);
 
   const toggleBlock = async (date: string) => {
     if (!doctor) return;
@@ -216,33 +233,55 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
 
   const totalApptThisWeek = weekDates.reduce((acc, d) => acc + getSlotsForDay(d).length, 0);
 
-  // Patient OTP access (now direct access)
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Add new patient to doctor's list
+  const handleAddSavedPatient = async (pid: string) => {
+    if (!pid.trim()) return;
+    setAccessLoading(true); setAccessError("");
+    try {
+      const res = await fetch(`${API}/api/doctor/saved-patients`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorId: doctor.id, patientId: pid })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      
+      await fetchSavedPatients(); // Refresh list
+      setSearchId(""); // Clear input
+      alert("Patient added successfully!");
+    } catch (err: any) {
+      setAccessError(err.message);
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  // Open records directly
+  const openPatientRecords = async (pid: string) => {
     setAccessLoading(true); setAccessError("");
     try {
       const res = await fetch(`${API}/api/doctor/search`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: searchId })
+        body: JSON.stringify({ patientId: pid })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       
       setPatientData(data.patient);
-
-      // Fetch the SAME merged timeline that the patient sees
-      const pid = data.patient?.patientId || searchId;
       const tlRes = await fetch(`${API}/api/appointments/patient/${pid}/timeline`);
       const tlData = await tlRes.json();
-      if (tlData.success && tlData.data?.length) {
-        setPatientTimeline(tlData.data);
-      } else {
-        setPatientTimeline([]);
-      }
-
+      setPatientTimeline(tlData.success && tlData.data?.length ? tlData.data : []);
       setAccessStep("view");
-    } catch (err: any) { setAccessError(err.message); }
-    finally { setAccessLoading(false); }
+    } catch (err: any) {
+      setAccessError(err.message);
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  // Deprecated direct search, mapped to add patient logic for UI backward compatibility
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleAddSavedPatient(searchId);
   };
 
   const handleVerify = async (e: React.FormEvent) => {
@@ -337,6 +376,7 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       blockedDates, leaveMode, setLeaveMode, toggleBlock, getSlotsForDay, isExpiredSlot, totalApptThisWeek,
       searchId, setSearchId, otp, setOtp, accessStep, setAccessStep, accessError, setAccessError,
       accessLoading, patientData, setPatientData, patientTimeline, setPatientTimeline,
+      savedPatients, setSavedPatients, fetchSavedPatients, handleAddSavedPatient, openPatientRecords,
       handleSearch, handleVerify,
       showAddRecord, setShowAddRecord, newRecord, setNewRecord, uploading, attachedFiles, setAttachedFiles,
       fileRef, handleAddRecord,

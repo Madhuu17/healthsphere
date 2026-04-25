@@ -7,6 +7,7 @@ import { sendOTP } from '../utils/sendOTP';
 import { getRecentSymptoms } from '../services/insightEngine';
 import Interaction from '../models/Interaction';
 import { GoogleGenAI } from '@google/genai';
+import DoctorPatient from '../models/DoctorPatient';
 
 const otpStore: Record<string, string> = {};
 
@@ -200,6 +201,49 @@ export const requestPatientAccess = async (req: Request, res: Response): Promise
 // ─── Verify route can remain for backwards compatibility or be removed ──────────────────
 export const verifyPatientAccess = async (req: Request, res: Response): Promise<void> => {
   res.status(400).json({ message: 'OTP verification is no longer required.' });
+};
+
+// ─── Save patient to doctor's list ──────────────────────────────────────────
+export const addSavedPatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, patientId } = req.body;
+    if (!doctorId || !patientId) { res.status(400).json({ message: 'Missing fields' }); return; }
+
+    const patient = await Patient.findOne({ patientId }).select('patientId name contactNumber');
+    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
+
+    const existing = await DoctorPatient.findOne({ doctorId, patientId });
+    if (existing) { res.status(400).json({ message: 'Patient already added' }); return; }
+
+    await DoctorPatient.create({ doctorId, patientId });
+    res.status(201).json({ message: 'Patient saved successfully', patient });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─── Get saved patients for a doctor ────────────────────────────────────────
+export const getSavedPatients = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId } = req.params;
+    const saved = await DoctorPatient.find({ doctorId }).sort({ addedAt: -1 }).lean();
+    if (!saved.length) { res.json([]); return; }
+
+    const pids = saved.map(s => s.patientId);
+    const patients = await Patient.find({ patientId: { $in: pids } }).select('patientId name contactNumber').lean();
+
+    const patientMap = new Map();
+    patients.forEach((p: any) => patientMap.set(p.patientId, p));
+
+    const result = saved.map(s => {
+      const p = patientMap.get(s.patientId);
+      return p ? { patientId: p.patientId, name: p.name, contactNumber: p.contactNumber } : null;
+    }).filter(Boolean);
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
 };
 
 // ─── Doctor adds prescription / record to patient ────────────────────────────

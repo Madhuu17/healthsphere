@@ -12,6 +12,8 @@ import {
   addPatientRecord,
   setupDoctorProfile,
   getPatientSummary,
+  addSavedPatient,
+  getSavedPatients,
 } from '../controllers/doctorController';
 
 const router = express.Router();
@@ -24,6 +26,10 @@ router.post('/book',               bookAppointment);
 router.get('/slots',               getAvailableSlots);
 router.post('/search',             requestPatientAccess);
 router.post('/verify',             verifyPatientAccess);
+
+// Saved Patients
+router.post('/saved-patients',     addSavedPatient);
+router.get('/saved-patients/:doctorId', getSavedPatients);
 
 // AI Symptom Summary for doctor
 router.get('/patient-summary/:patientId', getPatientSummary);
