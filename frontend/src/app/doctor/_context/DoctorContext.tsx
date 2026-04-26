@@ -314,16 +314,6 @@ export function DoctorProvider({ children }: { children: ReactNode }) {
       });
       const rxData = await rxRes.json();
       if (!rxRes.ok) throw new Error(rxData.message);
-      const medSummary = validMeds.map((m: any) => `• ${m.medicineName} (${m.type}) — ${m.dosage}, ${m.frequency}, ${m.durationDays} days`).join("\n");
-      const fd = new FormData();
-      fd.append("patientId", patientData.patientId); fd.append("doctorId", doctor.id);
-      fd.append("doctorName", doctor.name); fd.append("type", "prescription");
-      fd.append("title", rxTitle);
-      fd.append("description", `${rxNotes ? rxNotes + "\n\n" : ""}Medicines Prescribed:\n${medSummary}`);
-      fd.append("date", new Date().toISOString());
-      attachedFiles.forEach(f => fd.append("attachments", f));
-      const recRes = await fetch(`${API}/api/doctor/add-record`, { method: "POST", body: fd });
-      const recData = await recRes.json();
       // Re-fetch the full merged timeline to stay in sync with patient view
       const tlRes2 = await fetch(`${API}/api/appointments/patient/${patientData.patientId}/timeline`);
       const tlData2 = await tlRes2.json();

@@ -137,7 +137,8 @@ export const getPatientTimeline = async (req: Request, res: Response): Promise<v
     const { patientId } = req.params;
 
     const [records, prescriptions] = await Promise.all([
-      MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
+      // Exclude type:'prescription' — prescriptions are served exclusively from the Prescription collection
+      MedicalRecord.find({ patientId, type: { $ne: 'prescription' } }).sort({ date: -1 }).lean(),
       Prescription.find({ patientId }).sort({ prescribedDate: -1 }).lean(),
     ]);
 

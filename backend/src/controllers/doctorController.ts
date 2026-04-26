@@ -171,7 +171,8 @@ export const requestPatientAccess = async (req: Request, res: Response): Promise
     if (!patient) { res.status(404).json({ message: 'Patient not found in central registry.' }); return; }
 
     const [rawRecords, appointments] = await Promise.all([
-      MedicalRecord.find({ patientId }).sort({ date: -1 }).lean(),
+      // Exclude type:'prescription' — prescriptions live exclusively in Prescription collection
+      MedicalRecord.find({ patientId, type: { $ne: 'prescription' } }).sort({ date: -1 }).lean(),
       Appointment.find({ patientId }).sort({ date: -1 }).lean(),
     ]);
 

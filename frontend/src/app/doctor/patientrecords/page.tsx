@@ -62,10 +62,10 @@ function RecordDetailModal({ entry, formatDate, onClose }: { entry: any; formatD
         </div>
 
         <div className="flex-1 overflow-y-auto p-7 space-y-6">
-          {(entry.diagnosis || entry.description) && (
+          {(entry.diagnosis || entry.description || entry.notes) && (
             <div className={`rounded-2xl p-4 border ${meta.border} ${meta.bg}`}>
               <p className={`text-[10px] font-black uppercase tracking-wider mb-1 ${meta.color}`}>{entry.diagnosis ? "Diagnosis" : "Notes"}</p>
-              <p className="text-sm text-slate-700 leading-relaxed">{entry.diagnosis || entry.description}</p>
+              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{entry.diagnosis || entry.description || entry.notes}</p>
             </div>
           )}
 
@@ -155,8 +155,8 @@ function EHRCard({ entry, formatDate, onClick }: { entry: any; formatDate:(d:any
           {entry.hospitalName && <span className="flex items-center gap-1"><Building2 size={11} className="text-slate-400"/>{entry.hospitalName}</span>}
         </div>
 
-        {(entry.diagnosis || entry.description) && (
-          <p className="text-xs text-slate-600 line-clamp-2 mb-3 leading-relaxed">🩺 {entry.diagnosis || entry.description}</p>
+        {(entry.diagnosis || entry.description || entry.notes) && (
+          <p className="text-xs text-slate-600 line-clamp-2 mb-3 leading-relaxed">🩺 {entry.diagnosis || entry.description || entry.notes}</p>
         )}
 
         {meds.length > 0 && (
