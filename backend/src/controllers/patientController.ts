@@ -110,3 +110,111 @@ export const updatePatientProfile = async (req: Request, res: Response): Promise
   }
 };
 
+// ── ADD ADDRESS ──────────────────────────────────────────────────────────────
+export const addPatientAddress = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId } = req.params;
+    const { label, fullAddress, lat, lng, isDefault } = req.body;
+
+    if (!label || !fullAddress || lat == null || lng == null) {
+      res.status(400).json({ message: 'label, fullAddress, lat, and lng are required.' });
+      return;
+    }
+
+    const patient = await Patient.findOne({ patientId });
+    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
+
+    if (isDefault && patient.addresses) {
+      patient.addresses.forEach((a: any) => { a.isDefault = false; });
+    }
+
+    if (!patient.addresses) (patient as any).addresses = [];
+    (patient as any).addresses.push({ label, fullAddress, lat, lng, isDefault: !!isDefault });
+    await patient.save();
+
+    res.json({ success: true, message: 'Address added.', addresses: (patient as any).addresses });
+  } catch (error) {
+    if (error instanceof Error) res.status(500).json({ message: error.message });
+    else res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ── UPDATE ADDRESS ────────────────────────────────────────────────────────────
+export const updatePatientAddress = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId, addressId } = req.params;
+    const { label, fullAddress, lat, lng, isDefault } = req.body;
+
+    const patient = await Patient.findOne({ patientId });
+    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
+
+    const addr = (patient as any).addresses?.find((a: any) => a._id.toString() === addressId);
+    if (!addr) { res.status(404).json({ message: 'Address not found' }); return; }
+
+    if (isDefault && (patient as any).addresses) {
+      (patient as any).addresses.forEach((a: any) => { a.isDefault = false; });
+    }
+
+    if (label !== undefined) addr.label = label;
+    if (fullAddress !== undefined) addr.fullAddress = fullAddress;
+    if (lat !== undefined) addr.lat = lat;
+    if (lng !== undefined) addr.lng = lng;
+    if (isDefault !== undefined) addr.isDefault = isDefault;
+
+    await patient.save();
+    res.json({ success: true, message: 'Address updated.', addresses: (patient as any).addresses });
+  } catch (error) {
+    if (error instanceof Error) res.status(500).json({ message: error.message });
+    else res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ── DELETE ADDRESS ────────────────────────────────────────────────────────────
+export const deletePatientAddress = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId, addressId } = req.params;
+
+    const patient = await Patient.findOne({ patientId });
+    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
+
+    const before = (patient as any).addresses?.length || 0;
+    if ((patient as any).addresses) {
+      (patient as any).addresses = (patient as any).addresses.filter(
+        (a: any) => a._id.toString() !== addressId
+      );
+    }
+    if (((patient as any).addresses?.length || 0) === before) {
+      res.status(404).json({ message: 'Address not found' }); return;
+    }
+
+    await patient.save();
+    res.json({ success: true, message: 'Address deleted.', addresses: (patient as any).addresses });
+  } catch (error) {
+    if (error instanceof Error) res.status(500).json({ message: error.message });
+    else res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ── SET DEFAULT ADDRESS ───────────────────────────────────────────────────────
+export const setDefaultAddress = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId, addressId } = req.params;
+
+    const patient = await Patient.findOne({ patientId });
+    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
+
+    let found = false;
+    (patient as any).addresses?.forEach((a: any) => {
+      if (a._id.toString() === addressId) { a.isDefault = true; found = true; }
+      else { a.isDefault = false; }
+    });
+
+    if (!found) { res.status(404).json({ message: 'Address not found' }); return; }
+
+    await patient.save();
+    res.json({ success: true, message: 'Default address updated.', addresses: (patient as any).addresses });
+  } catch (error) {
+    if (error instanceof Error) res.status(500).json({ message: error.message });
+    else res.status(500).json({ message: 'Server error' });
+  }
+};

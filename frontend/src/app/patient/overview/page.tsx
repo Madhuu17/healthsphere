@@ -8,6 +8,7 @@ import {
 import { usePatient } from "../_context/PatientContext";
 import Link from "next/link";
 import AIEvolution from "../_components/AIEvolution";
+import SavedAddresses from "../_components/SavedAddresses";
 
 // ── Medication mini-card type ──────────────────────────────────────────────
 interface ActiveMed {
@@ -275,6 +276,11 @@ export default function PatientOverview() {
           )}
         </div>
       </div>
+
+      {/* Saved Addresses */}
+      {userId && userId !== "..." && (
+        <SavedAddresses patientId={userId} />
+      )}
     </div>
   );
 }

@@ -129,7 +129,7 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
     }
 
     const todayYMD = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
-    const isToday  = date === todayYMD;
+    const isToday = date === todayYMD;
 
     // If today, cut off past slots (round up to next 30-min boundary)
     let cutoffMinutes = 0;
@@ -142,8 +142,8 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
 
     const allSlots: string[] = [];
     const start = new Date(); start.setHours(9, 0, 0, 0);
-    const end   = new Date(); end.setHours(21, 0, 0, 0);
-    const cur   = new Date(start);
+    const end = new Date(); end.setHours(21, 0, 0, 0);
+    const cur = new Date(start);
     while (cur <= end) {
       const totalMin = cur.getHours() * 60 + cur.getMinutes();
       if (!isToday || totalMin >= cutoffMinutes) {
@@ -164,7 +164,6 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
 };
 
 
-// ─── Direct patient record access (OTP bypass removed) ────────────────────────────────────
 export const requestPatientAccess = async (req: Request, res: Response): Promise<void> => {
   try {
     const { patientId } = req.body;
@@ -176,7 +175,7 @@ export const requestPatientAccess = async (req: Request, res: Response): Promise
       Appointment.find({ patientId }).sort({ date: -1 }).lean(),
     ]);
 
-    // Deduplicate: remove medical records that duplicate a completed appointment
+
     const apptIdSet = new Set(appointments.map((a: any) => a.appointmentId).filter(Boolean));
     const seen = new Set<string>();
     const timeline = rawRecords.filter((r: any) => {
@@ -203,82 +202,10 @@ export const verifyPatientAccess = async (req: Request, res: Response): Promise<
   res.status(400).json({ message: 'OTP verification is no longer required.' });
 };
 
-// ─── Save patient to doctor's list ──────────────────────────────────────────
-export const addSavedPatient = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { doctorId, patientId } = req.body;
-    if (!doctorId || !patientId) { res.status(400).json({ message: 'Missing fields' }); return; }
-
-    const patient = await Patient.findOne({ patientId }).select('patientId name contactNumber');
-    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
-
-    const existing = await DoctorPatient.findOne({ doctorId, patientId });
-    if (existing) { res.status(400).json({ message: 'Patient already added' }); return; }
-
-    await DoctorPatient.create({ doctorId, patientId });
-    res.status(201).json({ message: 'Patient saved successfully', patient });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─── Get saved patients for a doctor ────────────────────────────────────────
-export const getSavedPatients = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { doctorId } = req.params;
-    const saved = await DoctorPatient.find({ doctorId }).sort({ addedAt: -1 }).lean();
-    if (!saved.length) { res.json([]); return; }
-
-    const pids = saved.map(s => s.patientId);
-    const patients = await Patient.find({ patientId: { $in: pids } }).select('patientId name contactNumber').lean();
-
-    const patientMap = new Map();
-    patients.forEach((p: any) => patientMap.set(p.patientId, p));
-
-    const result = saved.map(s => {
-      const p = patientMap.get(s.patientId);
-      return p ? { patientId: p.patientId, name: p.name, contactNumber: p.contactNumber } : null;
-    }).filter(Boolean);
-
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─── Remove single saved patient ───────────────────────────────────────────
-export const removeSavedPatient = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { doctorId, patientId } = req.params;
-    await DoctorPatient.findOneAndDelete({ doctorId, patientId });
-    res.json({ message: 'Patient removed successfully' });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─── Bulk remove saved patients ────────────────────────────────────────────
-export const bulkRemoveSavedPatients = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { doctorId, patientIds } = req.body;
-    if (!doctorId || !Array.isArray(patientIds)) {
-      res.status(400).json({ message: 'Invalid payload' });
-      return;
-    }
-    await DoctorPatient.deleteMany({ doctorId, patientId: { $in: patientIds } });
-    res.json({ message: 'Selected patients removed successfully' });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
 // ─── Doctor adds prescription / record to patient ────────────────────────────
 export const addPatientRecord = async (req: Request, res: Response): Promise<void> => {
   try {
-    const {
-      patientId, doctorId, doctorName, hospitalName, type, title, description, date,
-      diagnosis, medicines, documents,
-    } = req.body;
+    const { patientId, doctorId, doctorName, type, title, description, date } = req.body;
     const patient = await Patient.findOne({ patientId });
     if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
 
@@ -288,34 +215,13 @@ export const addPatientRecord = async (req: Request, res: Response): Promise<voi
       ? files.map(f => `http://localhost:5000/uploads/${f.filename}`)
       : (req.body.attachments ? (Array.isArray(req.body.attachments) ? req.body.attachments : [req.body.attachments]) : []);
 
-    // Parse medicines and documents if they arrive as JSON strings
-    let parsedMedicines: any[] = [];
-    let parsedDocuments: any[] = [];
-    try { parsedMedicines = typeof medicines === 'string' ? JSON.parse(medicines) : (medicines || []); } catch {}
-    try { parsedDocuments = typeof documents === 'string' ? JSON.parse(documents) : (documents || []); } catch {}
-
-    // Build document entries from file uploads (mark as prescription/xray/etc based on type)
-    if (files && files.length > 0) {
-      files.forEach(f => {
-        const fileUrl = `http://localhost:5000/uploads/${f.filename}`;
-        const docType = type === 'xray' ? 'xray' : type === 'lab_report' ? 'blood_report' : 'prescription';
-        parsedDocuments.push({ type: docType, fileUrl, label: title || f.originalname, uploadedAt: new Date() });
-      });
-    }
-
     const record = await MedicalRecord.create({
       patientId, doctorId,
-      doctorName:   doctorName || null,
-      hospitalName: hospitalName || null,
-      type:         type || 'prescription',
-      recordType:   type === 'prescription' ? 'prescription' : 'report',
+      type: type || 'prescription',
       title,
-      description:  description || '',
-      date:         date ? new Date(date) : new Date(),
-      diagnosis:    diagnosis || null,
-      medicines:    parsedMedicines,
-      documents:    parsedDocuments,
-      attachments,
+      description,
+      date: date ? new Date(date) : new Date(),
+      attachments
     });
 
     res.status(201).json({ message: 'Record added.', record });
@@ -446,5 +352,74 @@ Task: Summarize the patient's recent symptoms in a short, clear, non-medical par
   } catch (error: any) {
     console.error('[Doctor] getPatientSummary error:', error.message);
     res.status(500).json({ success: false, message: 'Failed to generate patient summary', error: error.message });
+  }
+};
+
+// ─── Save patient to doctor's list ──────────────────────────────────────────
+export const addSavedPatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, patientId } = req.body;
+    if (!doctorId || !patientId) { res.status(400).json({ message: 'Missing fields' }); return; }
+
+    const patient = await Patient.findOne({ patientId }).select('patientId name contactNumber');
+    if (!patient) { res.status(404).json({ message: 'Patient not found' }); return; }
+
+    const existing = await DoctorPatient.findOne({ doctorId, patientId });
+    if (existing) { res.status(400).json({ message: 'Patient already added' }); return; }
+
+    await DoctorPatient.create({ doctorId, patientId });
+    res.status(201).json({ message: 'Patient saved successfully', patient });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─── Get saved patients for a doctor ────────────────────────────────────────
+export const getSavedPatients = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId } = req.params;
+    const saved = await DoctorPatient.find({ doctorId }).sort({ addedAt: -1 }).lean();
+    if (!saved.length) { res.json([]); return; }
+
+    const pids = saved.map(s => s.patientId);
+    const patients = await Patient.find({ patientId: { $in: pids } }).select('patientId name contactNumber').lean();
+
+    const patientMap = new Map();
+    patients.forEach((p: any) => patientMap.set(p.patientId, p));
+
+    const result = saved.map(s => {
+      const p = patientMap.get(s.patientId);
+      return p ? { patientId: p.patientId, name: p.name, contactNumber: p.contactNumber } : null;
+    }).filter(Boolean);
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─── Remove single saved patient ───────────────────────────────────────────
+export const removeSavedPatient = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, patientId } = req.params;
+    await DoctorPatient.findOneAndDelete({ doctorId, patientId });
+    res.json({ message: 'Patient removed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─── Bulk remove saved patients ────────────────────────────────────────────
+export const bulkRemoveSavedPatients = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { doctorId, patientIds } = req.body;
+    if (!doctorId || !Array.isArray(patientIds)) {
+      res.status(400).json({ message: 'Invalid payload' });
+      return;
+    }
+    await DoctorPatient.deleteMany({ doctorId, patientId: { $in: patientIds } });
+    res.json({ message: 'Selected patients removed successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };

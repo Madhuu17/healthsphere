@@ -1,6 +1,18 @@
 import { Request, Response } from 'express';
 import Doctor from '../models/Doctor';
 import Appointment from '../models/Appointment';
+import HospitalLocation from '../models/HospitalLocation';
+
+// ── Haversine distance (km) ──────────────────────────────────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // ─── Search doctors by name, specialty, and/or hospital ───────────────────────
 export const searchDoctors = async (req: Request, res: Response): Promise<void> => {
@@ -213,6 +225,114 @@ export const voiceBook = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('[VoiceBooking] voiceBook error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ─── Find nearest doctors by specialty + patient location ─────────────────────
+export const nearestDoctors = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { lat, lng, specialty, hospital, limit } = req.body;
+
+    if (lat == null || lng == null) {
+      res.status(400).json({ success: false, message: 'Patient location (lat, lng) is required.' });
+      return;
+    }
+    if (!specialty) {
+      res.status(400).json({ success: false, message: 'Specialty is required.' });
+      return;
+    }
+
+    // 1. Find matching doctors
+    const doctorQuery: any = { isProfileCompleted: true };
+    // Map specialty terms to flexible stems for DB matching
+    // e.g. "Cardiologist" → matches "Cardiology", "Cardiologist", etc.
+    const specStemMap: Record<string, string> = {
+      cardiologist: 'cardiol', dermatologist: 'dermatol', neurologist: 'neurol',
+      orthopedic: 'orthop', pediatrician: 'pediat', psychiatrist: 'psychiat',
+      ophthalmologist: 'ophthalm', gynecologist: 'gynecol', urologist: 'urol',
+      oncologist: 'oncol', endocrinologist: 'endocrinol', gastroenterologist: 'gastroenter',
+      pulmonologist: 'pulmonol', nephrologist: 'nephrol', rheumatologist: 'rheumatol',
+      surgeon: 'surg', dentist: 'dent', ent: 'ent', general: 'general',
+    };
+    const stem = specStemMap[specialty.toLowerCase()] || specialty;
+    doctorQuery.specialization = { $regex: new RegExp(stem, 'i') };
+    if (hospital) {
+      doctorQuery.hospital = { $regex: new RegExp(hospital, 'i') };
+    }
+
+    const doctors = await Doctor.find(doctorQuery)
+      .select('doctorId name specialization hospital experience qualification gender blockedDates')
+      .lean();
+
+    if (!doctors.length) {
+      res.json({ success: true, doctors: [], message: 'No matching doctors found.' });
+      return;
+    }
+
+    // 2. Get all hospital locations in one query
+    const hospitalNames = [...new Set(doctors.map((d: any) => d.hospital).filter(Boolean))];
+    const locations = await HospitalLocation.find({
+      hospitalName: { $in: hospitalNames.map(h => new RegExp(`^${h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')) }
+    }).lean();
+
+    const locationMap = new Map<string, { lat: number; lng: number; address: string }>();
+    locations.forEach((loc: any) => {
+      locationMap.set(loc.hospitalName.toLowerCase(), { lat: loc.lat, lng: loc.lng, address: loc.address });
+    });
+
+    // 3. Calculate distance and merge
+    const todayYMD = new Date().toISOString().split('T')[0];
+
+    // Get today's booked slots for all matching doctors in one query
+    const doctorIds = doctors.map((d: any) => d.doctorId);
+    const todayBookings = await Appointment.find({
+      doctorId: { $in: doctorIds },
+      date: todayYMD,
+      status: 'scheduled',
+    }).select('doctorId timeSlot').lean();
+
+    const bookedMap = new Map<string, number>();
+    todayBookings.forEach((b: any) => {
+      bookedMap.set(b.doctorId, (bookedMap.get(b.doctorId) || 0) + 1);
+    });
+
+    // Total possible slots: 9AM-9PM in 30-min = 25 slots
+    const TOTAL_SLOTS = 25;
+
+    const results = doctors
+      .map((doc: any) => {
+        const locKey = doc.hospital?.toLowerCase();
+        const loc = locKey ? locationMap.get(locKey) : null;
+        if (!loc) return null; // Skip doctors without location
+
+        const distance = haversineKm(lat, lng, loc.lat, loc.lng);
+        const bookedCount = bookedMap.get(doc.doctorId) || 0;
+        const isBlockedToday = doc.blockedDates?.includes(todayYMD);
+        const availableSlotsToday = isBlockedToday ? 0 : Math.max(0, TOTAL_SLOTS - bookedCount);
+
+        return {
+          doctorId: doc.doctorId,
+          name: doc.name,
+          specialization: doc.specialization,
+          hospital: doc.hospital,
+          experience: doc.experience,
+          gender: doc.gender,
+          clinicAddress: loc.address,
+          clinicLat: loc.lat,
+          clinicLng: loc.lng,
+          distanceKm: Math.round(distance * 10) / 10,
+          availableSlotsToday,
+          isBlockedToday: !!isBlockedToday,
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => a.distanceKm - b.distanceKm)
+      .slice(0, limit || 10);
+
+    res.json({ success: true, doctors: results });
+  } catch (error) {
+    console.error('[VoiceBooking] nearestDoctors error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

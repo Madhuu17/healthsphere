@@ -17,6 +17,7 @@ import {
   removeSavedPatient,
   bulkRemoveSavedPatients,
 } from '../controllers/doctorController';
+import { getDoctorLocation, upsertDoctorLocation } from '../controllers/hospitalLocationController';
 
 const router = express.Router();
 
@@ -43,5 +44,9 @@ router.post('/add-record', upload.array('attachments', 5), addPatientRecord);
 
 // First-login profile setup
 router.put('/setup/:doctorId', setupDoctorProfile);
+
+// Hospital location
+router.get('/location/:doctorId',  getDoctorLocation);
+router.put('/location/:doctorId',  upsertDoctorLocation);
 
 export default router;

@@ -3,6 +3,7 @@ import {
   searchDoctors,
   checkAvailability,
   voiceBook,
+  nearestDoctors,
 } from '../controllers/voiceBookingController';
 
 const router = Router();
@@ -15,5 +16,8 @@ router.post('/check-availability', checkAvailability);
 
 // POST /api/voice-booking/book
 router.post('/book', voiceBook);
+
+// POST /api/voice-booking/nearest-doctors
+router.post('/nearest-doctors', nearestDoctors);
 
 export default router;

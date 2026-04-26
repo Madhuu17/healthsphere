@@ -7,6 +7,7 @@
 export type VoiceIntent =
   | { type: 'book'; doctor?: string; hospital?: string; date?: string; time?: string }
   | { type: 'search_specialty'; specialty: string; hospital?: string }
+  | { type: 'find_nearest'; specialty: string; hospital?: string }
   | { type: 'check_availability'; doctor: string; date?: string; time?: string }
   | { type: 'confirm_yes' }
   | { type: 'confirm_no' }
@@ -218,6 +219,22 @@ export function parseVoiceIntent(transcript: string): VoiceIntent {
   }
   if (/^(no|nope|cancel|never mind|stop)\b/.test(lower)) {
     return { type: 'confirm_no' };
+  }
+
+  // ── Find nearest: "find nearest cardiologist", "nearest dermatologist near me", "nearby dentists" ──
+  const isFindNearest =
+    /\bnearest\b/.test(lower) ||
+    /\bnearby\b/.test(lower) ||
+    /\bnear\s+me\b/.test(lower) ||
+    /\bclosest\b/.test(lower) ||
+    /\bfind\s+(?:a\s+)?nearby\b/.test(lower);
+
+  if (isFindNearest) {
+    const specialty = extractSpecialty(transcript);
+    if (specialty) {
+      const hospital = extractHospital(transcript);
+      return { type: 'find_nearest', specialty, hospital };
+    }
   }
 
   // ── Specialty search: "who are the cardiologists", "available cardiologists" ──

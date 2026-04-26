@@ -1,5 +1,14 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IAddress {
+  _id?: any;
+  label: string;       // e.g. 'Home', 'Work', 'Parents House'
+  fullAddress: string;
+  lat: number;
+  lng: number;
+  isDefault: boolean;
+}
+
 export interface IPatient extends Document {
   patientId: string;
   name: string;
@@ -22,6 +31,7 @@ export interface IPatient extends Document {
   // Optional extra info
   address?: string;
   profilePicture?: string;
+  addresses?: IAddress[];
 
   createdAt: Date;
   updatedAt: Date;
@@ -47,6 +57,15 @@ const PatientSchema: Schema = new Schema(
     },
     address: { type: String, default: '' },
     profilePicture: { type: String, default: '' },
+    addresses: [
+      {
+        label:       { type: String, required: true },
+        fullAddress: { type: String, required: true },
+        lat:         { type: Number, required: true },
+        lng:         { type: Number, required: true },
+        isDefault:   { type: Boolean, default: false },
+      },
+    ],
   },
   { timestamps: true }
 );

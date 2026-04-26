@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, X, Calendar, Clock, Stethoscope, Building2, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Mic, MicOff, X, Calendar, Clock, Stethoscope, Building2, CheckCircle2, AlertCircle, Loader2, MapPin, Navigation } from "lucide-react";
 import { parseVoiceIntent, type VoiceIntent } from "@/utils/voiceNlp";
 
 const API = "http://localhost:5000";
@@ -14,6 +14,7 @@ type Phase =
   | "awaiting_input"
   | "awaiting_confirmation"
   | "booking"
+  | "nearest_results"
   | "success"
   | "error";
 
@@ -23,6 +24,15 @@ interface DoctorResult {
   specialization: string;
   hospital: string;
   experience?: number;
+}
+
+interface NearestDoctorResult extends DoctorResult {
+  clinicAddress: string;
+  clinicLat: number;
+  clinicLng: number;
+  distanceKm: number;
+  availableSlotsToday: number;
+  isBlockedToday: boolean;
 }
 
 interface Props {
@@ -45,6 +55,10 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [bookedAppt, setBookedAppt] = useState<any>(null);
   const [confirmMsg, setConfirmMsg] = useState("");
+
+  // Nearest doctor results
+  const [nearestResults, setNearestResults] = useState<NearestDoctorResult[]>([]);
+  const [nearestSpecialty, setNearestSpecialty] = useState("");
 
   // Speech recognition
   const recognitionRef = useRef<any>(null);
@@ -147,6 +161,9 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
       case "search_specialty":
         await handleSpecialtySearch(intent);
         break;
+      case "find_nearest":
+        await handleFindNearest(intent);
+        break;
       case "check_availability":
         await handleAvailabilityCheck(intent);
         break;
@@ -239,6 +256,83 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
       setErrorMsg("Network error — please check your connection.");
       setPhase("error");
     }
+  };
+
+  // ── CASE: Find nearest doctors ──
+  const handleFindNearest = async (intent: VoiceIntent & { type: "find_nearest" }) => {
+    setStatusText(`Locating nearest ${intent.specialty}s...`);
+
+    // 1. Get patient location
+    const coords = await getPatientLocation();
+    if (!coords) {
+      setStatusText("Please enable location or add a saved address to find nearby doctors.");
+      setPhase("idle");
+      return;
+    }
+
+    // 2. Call nearest doctors API
+    try {
+      const res = await fetch(`${API}/api/voice-booking/nearest-doctors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat: coords.lat,
+          lng: coords.lng,
+          specialty: intent.specialty,
+          hospital: intent.hospital,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.success || !data.doctors?.length) {
+        setStatusText(`No nearby ${intent.specialty}s found${intent.hospital ? ` at ${intent.hospital}` : ""}. Try a different specialty.`);
+        setPhase("idle");
+        return;
+      }
+
+      setNearestResults(data.doctors);
+      setNearestSpecialty(intent.specialty);
+      setStatusText(`Found ${data.doctors.length} ${intent.specialty}${data.doctors.length > 1 ? "s" : ""} near you.`);
+      setPhase("nearest_results");
+    } catch {
+      setErrorMsg("Network error — please check your connection.");
+      setPhase("error");
+    }
+  };
+
+  // ── Get patient location (saved default → browser GPS) ──
+  const getPatientLocation = async (): Promise<{ lat: number; lng: number } | null> => {
+    const patient = getPatient();
+
+    // Try saved default address first
+    try {
+      const res = await fetch(`${API}/api/patients/${patient.id}/dashboard`);
+      const data = await res.json();
+      const addrs = data.profile?.addresses || [];
+      const defaultAddr = addrs.find((a: any) => a.isDefault) || addrs[0];
+      if (defaultAddr?.lat && defaultAddr?.lng) {
+        return { lat: defaultAddr.lat, lng: defaultAddr.lng };
+      }
+    } catch {}
+
+    // Fallback to browser geolocation
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) { resolve(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { timeout: 8000 }
+      );
+    });
+  };
+
+  // ── Select nearest doctor → go to booking flow ──
+  const onSelectNearestDoctor = async (doc: NearestDoctorResult) => {
+    setSelectedDoc(doc);
+    setNearestResults([]);
+    setDoctors([]);
+    setStatusText(`Select date and time for ${doc.name}`);
+    setPhase("awaiting_input");
   };
 
   // ── CASE: Availability check ──
@@ -644,6 +738,104 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
         </motion.div>
       )}
 
+      {/* ── Nearest Doctor Results ── */}
+      {phase === "nearest_results" && nearestResults.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-6 py-6 max-h-[65vh] overflow-y-auto"
+        >
+          <div className="max-w-lg mx-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin size={14} className="text-teal-400" />
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Nearest {nearestSpecialty}s
+                </p>
+              </div>
+              <button
+                onClick={() => { setPhase("idle"); setNearestResults([]); setStatusText("Tap the mic for a new command."); }}
+                className="text-xs text-slate-500 hover:text-white font-bold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              {nearestResults.map((doc, idx) => (
+                <div
+                  key={doc.doctorId}
+                  className="bg-white/5 rounded-2xl border border-white/10 p-4 hover:border-teal-500/40 transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Rank */}
+                    <div className="w-8 h-8 rounded-xl bg-teal-500/20 flex items-center justify-center shrink-0">
+                      <span className="text-teal-400 text-xs font-black">{idx + 1}</span>
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-bold text-white text-sm">{doc.name}</p>
+                        <span className="bg-teal-500/20 text-teal-400 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <MapPin size={8} />
+                          {doc.distanceKm} km
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {doc.specialization} · {doc.hospital}
+                        {doc.experience ? ` · ${doc.experience} yrs` : ""}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1 truncate">
+                        <MapPin size={10} className="inline mr-1 text-slate-600" />
+                        {doc.clinicAddress}
+                      </p>
+
+                      {/* Availability + actions */}
+                      <div className="flex items-center gap-2 mt-3 flex-wrap">
+                        {doc.isBlockedToday ? (
+                          <span className="text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg">
+                            On leave today
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
+                            doc.availableSlotsToday > 5
+                              ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                              : doc.availableSlotsToday > 0
+                              ? "text-amber-400 bg-amber-500/10 border border-amber-500/20"
+                              : "text-red-400 bg-red-500/10 border border-red-500/20"
+                          }`}>
+                            {doc.availableSlotsToday > 0 ? `${doc.availableSlotsToday} slots today` : "Fully booked today"}
+                          </span>
+                        )}
+
+                        <button
+                          onClick={() => onSelectNearestDoctor(doc)}
+                          className="ml-auto px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1"
+                        >
+                          <Calendar size={10} />
+                          Book
+                        </button>
+
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${doc.clinicLat},${doc.clinicLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-[11px] font-bold rounded-xl transition-colors flex items-center gap-1"
+                        >
+                          <Navigation size={10} />
+                          Directions
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Retry button on error */}
       {phase === "error" && (
         <motion.button
@@ -661,7 +853,7 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
         <div className="absolute bottom-8 left-0 right-0 px-6">
           <div className="max-w-lg mx-auto bg-white/5 backdrop-blur rounded-2xl px-5 py-3 border border-white/10">
             <p className="text-[11px] text-slate-500 font-semibold text-center leading-relaxed">
-              Try: &ldquo;Book appointment with Dr Sairoop&rdquo; · &ldquo;Who are the cardiologists?&rdquo; · &ldquo;Check if Dr Sanjay is available tomorrow at 5 PM&rdquo;
+              Try: &ldquo;Book appointment with Dr Sairoop&rdquo; · &ldquo;Find nearest cardiologist&rdquo; · &ldquo;Check if Dr Sanjay is available tomorrow at 5 PM&rdquo;
             </p>
           </div>
         </div>

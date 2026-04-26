@@ -7,6 +7,7 @@ import {
   CheckCircle, Zap, X, Brain, Sparkles, Loader2, Clock, Building2,
 } from "lucide-react";
 import { useDoctor } from "../_context/DoctorContext";
+import ClinicLocation from "../_components/ClinicLocation";
 
 // ── Severity helpers ──────────────────────────────────────────────────────────
 function severityMeta(score: number | null | undefined) {
@@ -131,6 +132,11 @@ export default function DoctorOverview() {
           </div>
         ))}
       </div>
+
+      {/* Clinic Location */}
+      {doctor?.id && (
+        <ClinicLocation doctorId={doctor.id} />
+      )}
 
       {/* Today's Appointments */}
       <div className="max-w-3xl mx-auto">
