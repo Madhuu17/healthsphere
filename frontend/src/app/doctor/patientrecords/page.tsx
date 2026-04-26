@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, X, Plus, Pill, FileText, CheckCircle2,
   AlertCircle, Image as ImageIcon, Paperclip, Send, Stethoscope,
-  Trash2, Timer, Calendar as CalendarIcon,
+  Trash2, Calendar as CalendarIcon,
   User, Building2, Download, Eye
 } from "lucide-react";
 import { useDoctor } from "../_context/DoctorContext";
+import MedicineCard from "../_components/MedicineCard";
+import { extractCondition } from "@/utils/prescriptionParser";
 
 // ── Type badge colours ───────────────────────────────────────────────────
 const TYPE_META: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
@@ -191,6 +193,28 @@ export default function DoctorPatientRecords() {
     addMed, removeMed, updateMed, emptyMed, savedPatients, setSavedPatients, openPatientRecords,
     doctor, API, showToast
   } = ctx;
+
+  // Stable toast callback passed to MedicineCard to avoid re-render cascade
+  const handleToast = useCallback((msg: string, type: "success" | "error") => {
+    showToast(msg, type);
+  }, [showToast]);
+
+  // Refs to avoid stale closures in stable callbacks (context setters are plain, not React dispatch)
+  const rxNotesRef = useRef(rxNotes);
+  const rxTitleRef = useRef(rxTitle);
+  useEffect(() => { rxNotesRef.current = rxNotes; }, [rxNotes]);
+  useEffect(() => { rxTitleRef.current = rxTitle; }, [rxTitle]);
+
+  // Append a transcript to Notes (called from each MedicineCard after voice fill)
+  const handleAppendNotes = useCallback((transcript: string) => {
+    const sep = rxNotesRef.current.trim() ? " " : "";
+    setRxNotes(rxNotesRef.current + sep + transcript);
+  }, [setRxNotes]);
+
+  // Set Prescription Title from extracted condition (only if currently empty)
+  const handleSetTitle = useCallback((condition: string) => {
+    if (!rxTitleRef.current.trim()) setRxTitle(condition);
+  }, [setRxTitle]);
 
   const [filterQuery, setFilterQuery] = useState("");
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
@@ -451,81 +475,43 @@ export default function DoctorPatientRecords() {
                 {/* Prescription Builder */}
                 {newRecord.type === "prescription" ? (
                   <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1.5">Prescription Title <span className="text-red-500">*</span></label>
-                        <input type="text" value={rxTitle} onChange={e => setRxTitle(e.target.value)} placeholder="e.g. Post-Op Care"
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm"/>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1.5">Notes (optional)</label>
-                        <input type="text" value={rxNotes} onChange={e => setRxNotes(e.target.value)} placeholder="General instructions"
-                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-sm"/>
-                      </div>
+
+                    {/* Prescription Title */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">Prescription Title <span className="text-red-500">*</span></label>
+                      <input type="text" value={rxTitle} onChange={e => setRxTitle(e.target.value)}
+                        placeholder="e.g. High Fever (auto-filled when you use medicine mic)"
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-semibold text-sm"/>
                     </div>
 
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-start gap-2">
-                      <Timer size={14} className="text-purple-500 shrink-0 mt-0.5"/>
-                      <p className="text-purple-700 text-xs font-medium">
-                        <strong>Duration Tracking:</strong> Each medicine requires a duration (in days). The system will automatically move medications from Active → Past when their duration expires.
-                      </p>
+                    {/* Notes — auto-appended by medicine mics, also manually editable */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                        Notes <span className="text-slate-400 font-medium">(optional — appended automatically from each medicine mic)</span>
+                      </label>
+                      <textarea value={rxNotes} onChange={e => setRxNotes(e.target.value)}
+                        placeholder="Auto-filled when you use the 🎙️ button on each medicine below."
+                        rows={3}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-sm resize-none"/>
                     </div>
 
                     <div className="space-y-4">
-                      {rxMeds.map((med: any, idx: number) => (
-                        <div key={idx} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 relative">
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                              <Pill size={12} className="text-purple-500"/> Medicine #{idx + 1}
-                            </span>
-                            {rxMeds.length > 1 && (
-                              <button onClick={() => removeMed(idx)} className="w-7 h-7 bg-red-50 text-red-400 rounded-lg flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all">
-                                <Trash2 size={13}/>
-                              </button>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-3 gap-3 mb-3">
-                            <div className="col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1">Medicine Name <span className="text-red-500">*</span></label>
-                              <input type="text" value={med.medicineName} onChange={e => updateMed(idx, "medicineName", e.target.value)} placeholder="e.g. Amoxicillin 500mg"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold"/>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1">Type</label>
-                              <select value={med.type} onChange={e => updateMed(idx, "type", e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold bg-white">
-                                <option value="tablet">💊 Tablet</option><option value="capsule">💊 Capsule</option>
-                                <option value="syrup">🧪 Syrup</option><option value="injection">💉 Injection</option>
-                                <option value="drops">💧 Drops</option><option value="ointment">🧴 Ointment</option>
-                                <option value="other">🩺 Other</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3 mb-3">
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1">Dosage <span className="text-red-500">*</span></label>
-                              <input type="text" value={med.dosage} onChange={e => updateMed(idx, "dosage", e.target.value)} placeholder="e.g. 500mg"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold"/>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1">Frequency <span className="text-red-500">*</span></label>
-                              <select value={med.frequency} onChange={e => updateMed(idx, "frequency", e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/30 text-sm font-semibold bg-white">
-                                <option value="">Select…</option><option value="Once daily">Once daily</option>
-                                <option value="Twice daily">Twice daily</option><option value="Three times daily">Three times daily</option>
-                                <option value="Every 8 hours">Every 8 hours</option><option value="Every 12 hours">Every 12 hours</option>
-                                <option value="Before breakfast">Before breakfast</option><option value="After meals">After meals</option>
-                                <option value="Before bed">Before bed</option><option value="As needed">As needed (PRN)</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1">Duration (days) <span className="text-red-500">*</span></label>
-                              <input type="number" min={1} max={365} value={med.durationDays} onChange={e => updateMed(idx, "durationDays", e.target.value)} placeholder="e.g. 7"
-                                className="w-full px-3 py-2 border border-purple-200 bg-purple-50/50 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/30 text-sm font-bold text-purple-700"/>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                      <AnimatePresence>
+                        {rxMeds.map((med: any, idx: number) => (
+                          <MedicineCard
+                            key={idx}
+                            med={med}
+                            index={idx}
+                            total={rxMeds.length}
+                            onUpdate={updateMed}
+                            onRemove={removeMed}
+                            onToast={handleToast}
+                            onAppendNotes={handleAppendNotes}
+                            onSetTitle={handleSetTitle}
+                            disabled={uploading}
+                          />
+                        ))}
+                      </AnimatePresence>
                       <button onClick={addMed}
                         className="w-full border-2 border-dashed border-blue-300 text-blue-600 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-50 transition-all text-sm font-bold">
                         <Plus size={16}/> Add Another Medicine
@@ -534,19 +520,24 @@ export default function DoctorPatientRecords() {
 
                     {/* File attachments */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5">Attach Files (optional)</label>
-                      <input type="file" ref={fileRef} accept="image/*,.pdf" multiple onChange={e => setAttachedFiles(Array.from(e.target.files || []))} className="hidden"/>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">Attach Files <span className="text-slate-400 font-medium">(optional)</span></label>
+                      <input type="file" ref={fileRef} accept="image/*,.pdf" multiple
+                        onChange={e => setAttachedFiles((prev: File[]) => [...prev, ...Array.from(e.target.files || [])])}
+                        className="hidden"/>
                       <button type="button" onClick={() => fileRef.current?.click()}
                         className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-500 hover:text-blue-600 py-4 rounded-2xl flex flex-col items-center gap-1.5 transition-all font-medium text-sm group">
-                        <Paperclip size={18} className="group-hover:scale-110 transition-transform"/> Click to attach files
+                        <Paperclip size={18} className="group-hover:scale-110 transition-transform"/>
+                        <span>Click to attach files</span>
+                        <span className="text-xs text-slate-400">Images, PDFs · Max 10MB each</span>
                       </button>
                       {attachedFiles.length > 0 && (
                         <div className="mt-2 space-y-1.5">
                           {attachedFiles.map((f: File, i: number) => (
-                            <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-200">
-                              <ImageIcon size={12} className="text-blue-500 shrink-0"/>
+                            <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
+                              <ImageIcon size={13} className="text-blue-500 shrink-0"/>
                               <span className="text-xs font-medium text-slate-600 flex-1 truncate">{f.name}</span>
-                              <button onClick={() => setAttachedFiles((prev: File[]) => prev.filter((_: File,j: number) => j !== i))} className="text-slate-300 hover:text-red-400"><X size={12}/></button>
+                              <span className="text-xs text-slate-400 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                              <button onClick={() => setAttachedFiles((prev: File[]) => prev.filter((_: File, j: number) => j !== i))} className="text-slate-300 hover:text-red-400 shrink-0"><X size={12}/></button>
                             </div>
                           ))}
                         </div>
