@@ -15,6 +15,7 @@ type Phase =
   | "awaiting_confirmation"
   | "booking"
   | "nearest_results"
+  | "speaking"
   | "success"
   | "error";
 
@@ -72,6 +73,66 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
     const u = JSON.parse(raw);
     return { id: u.id || u.patientId || "", name: u.name || "" };
   };
+
+  // ── TTS: Voice Confirmation ──
+  const speakText = useCallback((text: string, onEnd?: () => void) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      console.warn("[VoiceAssistant] SpeechSynthesis not supported.");
+      onEnd?.();
+      return;
+    }
+    // Cancel any previous speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    // Select best English voice (prefer female)
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoices = voices.filter(v => v.lang.startsWith("en"));
+    const femaleVoice = englishVoices.find(v =>
+      /female|zira|samantha|google.*us.*female|microsoft.*zira/i.test(v.name)
+    );
+    const naturalVoice = englishVoices.find(v => !v.localService) || englishVoices[0];
+    utterance.voice = femaleVoice || naturalVoice || null;
+
+    utterance.onend = () => onEnd?.();
+    utterance.onerror = () => onEnd?.();
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const speakBookingConfirmation = useCallback((appt: any) => {
+    const docName = appt.doctorName || "your doctor";
+    const dateStr = new Date(appt.date + "T00:00:00").toLocaleDateString("en-US", {
+      day: "numeric", month: "long", year: "numeric",
+    });
+    const timeStr = appt.timeSlot || "";
+    const message = `Your appointment has been booked with ${docName} on ${dateStr} at ${timeStr}.`;
+
+    setPhase("speaking");
+    setStatusText("Speaking confirmation...");
+    speakText(message, () => {
+      setPhase("success");
+      setStatusText("Booking confirmed.");
+    });
+  }, [speakText]);
+
+  const speakBookingError = useCallback((msg?: string) => {
+    const message = msg || "Sorry, the appointment could not be booked. Please try another slot.";
+    speakText(message);
+  }, [speakText]);
+
+  // Preload voices (Chrome loads them async)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+  }, []);
 
   // ── Speech Recognition Setup ──
   const startListening = useCallback(() => {
@@ -437,9 +498,10 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
 
       if (data.success) {
         setBookedAppt(data.appointment);
-        setPhase("success");
         setStatusText("Appointment booked!");
         onBooked(data.appointment);
+        // Speak confirmation aloud
+        speakBookingConfirmation(data.appointment);
       } else if (res.status === 409) {
         setAvailableSlots(data.alternativeSlots || []);
         setStatusText("Slot was just taken. Choose an alternative:");
@@ -447,10 +509,12 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
       } else {
         setErrorMsg(data.message || "Booking failed");
         setPhase("error");
+        speakBookingError(data.message);
       }
     } catch {
       setErrorMsg("Network error — please check your connection.");
       setPhase("error");
+      speakBookingError();
     }
   };
 
@@ -513,7 +577,12 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => { stopListening(); };
+    return () => {
+      stopListening();
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
   }, [stopListening]);
 
   const formatDisplayDate = (d: string) => {
@@ -549,7 +618,7 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
       {/* ── Center Orb Area ── */}
       <div className="relative flex flex-col items-center gap-8">
         {/* Animated rings */}
-        {(phase === "listening" || phase === "processing" || phase === "booking") && (
+        {(phase === "listening" || phase === "processing" || phase === "booking" || phase === "speaking") && (
           <>
             <div className="absolute w-48 h-48 rounded-full border border-teal-500/20 animate-ping" style={{ animationDuration: "2s" }} />
             <div className="absolute w-64 h-64 rounded-full border border-teal-500/10 animate-ping" style={{ animationDuration: "3s" }} />
@@ -567,13 +636,15 @@ export default function VoiceAssistant({ onClose, onBooked }: Props) {
                 ? "bg-gradient-to-br from-teal-400 to-emerald-500 shadow-teal-500/40"
                 : phase === "processing" || phase === "booking"
                 ? "bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/40 cursor-wait"
+                : phase === "speaking"
+                ? "bg-gradient-to-br from-violet-400 to-purple-500 shadow-violet-500/40 cursor-wait"
                 : phase === "error"
                 ? "bg-gradient-to-br from-red-400 to-rose-500 shadow-red-500/40"
                 : "bg-gradient-to-br from-slate-600 to-slate-700 shadow-slate-500/20 hover:from-teal-500 hover:to-emerald-600"
             }`}
-            disabled={phase === "processing" || phase === "booking"}
+            disabled={phase === "processing" || phase === "booking" || phase === "speaking"}
           >
-            {phase === "processing" || phase === "booking" ? (
+            {phase === "processing" || phase === "booking" || phase === "speaking" ? (
               <Loader2 size={36} className="text-white animate-spin" />
             ) : phase === "listening" ? (
               <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}>
