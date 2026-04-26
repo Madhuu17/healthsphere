@@ -2,7 +2,7 @@
 
 ## Description
 
-HealthSphere is a full-stack AI healthcare application designed to bridge the gap between patients and doctors through intelligent automation. It features a fully voice-driven health assistant, an AI symptom checker with severity scoring, personalized diet planning, smart appointment booking, and a dual-layer memory system that remembers every patient's health journey. This memory system ensures each AI interaction becomes more context-aware over time.
+HealthSphere is a full-stack AI healthcare application designed to bridge the gap between patients and doctors through intelligent automation. It features an AI symptom checker with severity scoring, personalized diet planning, smart appointment booking, and a dual-layer memory system that remembers every patient's health journey. This memory system ensures each AI interaction becomes more context-aware over time.
 
 Built with Next.js, Express, MongoDB, and Google Gemini AI, HealthSphere demonstrates how modern AI can be applied to real-world healthcare workflows with production-grade architecture patterns like graceful degradation, fire-and-forget logging, and prompt enrichment.
 
@@ -11,14 +11,12 @@ Built with Next.js, Express, MongoDB, and Google Gemini AI, HealthSphere demonst
 | Aspect | What Makes It Different |
 |---|---|
 | AI Memory (Hindsight) | HealthSphere remembers past patient interactions through Hindsight, a semantic memory layer. The AI recalls previous symptoms, conditions, and treatments to provide contextually rich responses over time. |
-| Voice-Driven Health Assistant | The platform features a hands-free voice assistant that captures symptoms via voice, asks dynamic follow-up questions, analyzes severity, matches specialists, and seamlessly transitions into the appointment booking flow without requiring keyboard input. |
 | Personalized Healthcare | Diet plans and symptom assessments are enriched with each patient's medical history, ongoing medications, and past diagnoses. Every interaction gets smarter. |
 | Real-World Usability | The platform mirrors actual clinical workflows: severity-prioritized appointments, doctor-patient messaging, medical record management with AI summaries, and medication reminder scheduling. |
 
 ## Features
 
 ### AI-Powered
-* Voice-Driven Health Assistant: A conversational voice assistant that orchestrates end-to-end symptom capture, AI follow-up, and appointment booking.
 * Symptom Checker: Describe symptoms in natural language to receive AI-assessed severity scores and specialist recommendations.
 * Diet Planner: Personalized nutrition plans based on health profile, symptoms, and medical history.
 * Medical Report Summarizer: Upload reports and get plain-language AI summaries.
