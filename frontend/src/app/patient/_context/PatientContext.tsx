@@ -124,7 +124,6 @@ interface PatientContextType {
   openAppt: () => void;
   fetchSlots: (docId: string, date: string) => Promise<void>;
   confirmAppt: () => Promise<void>;
-  setMessages: (updater: any) => void;
   refreshAppointments: () => Promise<void>;
   markOneRead: (msg: any) => void;
   markAllRead: () => void;
@@ -525,7 +524,7 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       editBloodGroup, setEditBloodGroup, editProfilePicture, setEditProfilePicture,
       editSaving, setEditSaving,
       handleLogout, confirmLogout, openAppt, fetchSlots, confirmAppt,
-      markOneRead, markAllRead, setMessages, refreshAppointments, formatDate, calcAge, MOCK_MEDS, CITY_DATA, today,
+      markOneRead, markAllRead, refreshAppointments, formatDate, calcAge, MOCK_MEDS, CITY_DATA, today,
     }}>
       {children}
     </PatientContext.Provider>

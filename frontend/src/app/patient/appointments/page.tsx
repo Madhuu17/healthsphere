@@ -6,18 +6,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar as CalendarIcon, Stethoscope, Clock, CheckCircle2,
   XCircle, ChevronDown, ChevronUp, FileText, AlertCircle,
-  ArrowUpDown, History, Hourglass, Mic,
+  ArrowUpDown, History, Hourglass, Mic, MapPin,
 } from "lucide-react";
 import { usePatient } from "../_context/PatientContext";
 
 const VoiceAssistant = dynamic(() => import("../_components/VoiceAssistant"), { ssr: false });
+const HospitalMapPreview = dynamic(() => import("../_components/HospitalMapPreview"), { ssr: false });
 
 // ── Status chip ────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    scheduled:  "bg-teal-100   text-teal-700",
-    completed:  "bg-green-100  text-green-700",
-    cancelled:  "bg-red-100    text-red-600",
+    scheduled: "bg-teal-100   text-teal-700",
+    completed: "bg-green-100  text-green-700",
+    cancelled: "bg-red-100    text-red-600",
   };
   return (
     <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${map[status] || "bg-slate-100 text-slate-500"}`}>
@@ -31,10 +32,18 @@ function AppointmentCard({
   appt,
   formatDate,
   isPast = false,
+  showMap = false,
+  onToggleMap,
+  patientLat,
+  patientLng,
 }: {
   appt: any;
   formatDate: (d: any) => string;
   isPast?: boolean;
+  showMap?: boolean;
+  onToggleMap?: () => void;
+  patientLat?: number | null;
+  patientLng?: number | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -43,7 +52,7 @@ function AppointmentCard({
     ? "hover:border-slate-300"
     : "hover:border-teal-200";
   const hasDiagnosis = !!appt.diagnosis;
-  const hasReport    = !!appt.reportUrl;
+  const hasReport = !!appt.reportUrl;
 
   return (
     <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm ${borderHover} hover:shadow-md transition-all overflow-hidden`}>
@@ -91,6 +100,22 @@ function AppointmentCard({
           </button>
         )}
 
+        {/* View Location toggle — upcoming only */}
+        {!isPast && onToggleMap && (
+          <button
+            onClick={onToggleMap}
+            className={`w-full flex items-center justify-between text-xs font-bold pt-3 transition-colors ${
+              !(hasDiagnosis || hasReport) ? "border-t border-slate-100" : ""
+            } ${showMap ? "text-teal-600" : "text-slate-400 hover:text-teal-600"}`}
+          >
+            <span className="flex items-center gap-1.5">
+              <MapPin size={12} />
+              {showMap ? "Hide Location" : "View Location"}
+            </span>
+            {showMap ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+        )}
+
         <AnimatePresence>
           {open && (
             <motion.div
@@ -125,6 +150,30 @@ function AppointmentCard({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Map expansion */}
+        <AnimatePresence>
+          {showMap && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-3">
+                <HospitalMapPreview
+                  doctorId={appt.doctorId}
+                  doctorName={appt.doctorName}
+                  hospitalName={appt.hospital}
+                  patientLat={patientLat}
+                  patientLng={patientLng}
+                  compact
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -149,17 +198,15 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${
-        active
+      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${active
           ? `${color} shadow-sm`
           : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
-      }`}
+        }`}
     >
       <Icon size={15} />
       {label}
-      <span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
-        active ? "bg-white/30 text-inherit" : "bg-slate-100 text-slate-500"
-      }`}>
+      <span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${active ? "bg-white/30 text-inherit" : "bg-slate-100 text-slate-500"
+        }`}>
         {count}
       </span>
     </button>
@@ -178,21 +225,26 @@ export default function PatientAppointments() {
     formatDate,
     refreshAppointments,
     setMessages,
+    profile,
   } = usePatient();
 
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [showVoice, setShowVoice] = useState(false);
+  const [showMapId, setShowMapId] = useState<string | null>(null);
+
+  // Patient's default address for distance calc
+  const defaultAddr = profile?.addresses?.find((a: any) => a.isDefault) || profile?.addresses?.[0] || null;
 
   // Re-fetch appointments after voice booking
   const refreshAfterVoiceBook = useCallback(async (apptData?: any) => {
     // 1) Show notification locally
     if (apptData) {
-      setMessages((prev: any[]) => [{ 
-        id: Date.now(), 
-        type: "appointment", 
-        text: `Voice Booking: Appointment scheduled with ${apptData.doctorName} on ${formatDate(apptData.date)} at ${apptData.timeSlot}`, 
-        date: "Just Now", 
-        isNew: true 
+      setMessages((prev: any[]) => [{
+        id: Date.now(),
+        type: "appointment",
+        text: `Voice Booking: Appointment scheduled with ${apptData.doctorName} on ${formatDate(apptData.date)} at ${apptData.timeSlot}`,
+        date: "Just Now",
+        isNew: true
       }, ...prev]);
     }
     // 2) Refresh patient appointments from DB
@@ -319,7 +371,15 @@ export default function PatientAppointments() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04 }}
                   >
-                    <AppointmentCard appt={a} formatDate={formatDate} isPast={false} />
+                    <AppointmentCard
+                      appt={a}
+                      formatDate={formatDate}
+                      isPast={false}
+                      showMap={showMapId === (a.appointmentId || a._id)}
+                      onToggleMap={() => setShowMapId(p => p === (a.appointmentId || a._id) ? null : (a.appointmentId || a._id))}
+                      patientLat={defaultAddr?.lat}
+                      patientLng={defaultAddr?.lng}
+                    />
                   </motion.div>
                 ))}
               </div>
