@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Stethoscope, UserRound, Eye, EyeOff } from "lucide-react";
+import { Stethoscope, UserRound, Eye, EyeOff, Shield, Heart } from "lucide-react";
 import { useEffect } from "react";
 import { signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -17,6 +17,20 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // Role-aware colors
+  const isPatient = role === "patient";
+  const theme = {
+    gradient: isPatient ? "linear-gradient(135deg, #10B981, #06B6D4)" : "linear-gradient(135deg, #1E3A8A, #2563EB)",
+    primary: isPatient ? "#10B981" : "#2563EB",
+    primaryHover: isPatient ? "#059669" : "#1D4ED8",
+    bgTint: isPatient ? "#F0FDF4" : "#EFF6FF",
+    shadow: isPatient ? "rgba(16, 185, 129, 0.3)" : "rgba(37, 99, 235, 0.3)",
+    orb1: isPatient ? "rgba(16, 185, 129, 0.12)" : "rgba(37, 99, 235, 0.12)",
+    orb2: isPatient ? "rgba(6, 182, 212, 0.10)" : "rgba(99, 102, 241, 0.10)",
+    ringFocus: isPatient ? "rgba(16, 185, 129, 0.3)" : "rgba(37, 99, 235, 0.3)",
+    tabActive: isPatient ? "#065F46" : "#1E3A8A",
+  };
 
   useEffect(() => {
     const handleRedirectResult = async () => {
@@ -132,103 +146,151 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
-      {/* Background Decor */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-200/40 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-200/40 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden transition-colors duration-500" style={{ background: theme.bgTint }}>
+      {/* Background orbs — color shifts with role */}
+      <motion.div
+        key={`orb1-${role}`}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}
+        className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full blur-3xl pointer-events-none animate-float-slow"
+        style={{ background: `radial-gradient(circle, ${theme.orb1} 0%, transparent 70%)` }}
+      />
+      <motion.div
+        key={`orb2-${role}`}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.15 }}
+        className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full blur-3xl pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${theme.orb2} 0%, transparent 70%)`, animationDelay: "3s", animation: "float-slow 6s ease-in-out infinite reverse" }}
+      />
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-200/50 overflow-hidden border border-white z-10 p-8"
+        className="max-w-md w-full glass rounded-3xl shadow-2xl overflow-hidden z-10 p-8"
+        style={{ boxShadow: `0 25px 60px -12px ${theme.shadow}` }}
       >
+        {/* Logo + branding */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-blue-600 p-3.5 rounded-2xl text-white shadow-xl shadow-blue-600/30">
-              <Stethoscope size={32} />
-            </div>
+            <motion.div
+              key={role}
+              initial={{ scale: 0.8, rotate: -10 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 200 }}
+              className="p-3.5 rounded-2xl text-white shadow-xl"
+              style={{ background: theme.gradient, boxShadow: `0 8px 25px ${theme.shadow}` }}
+            >
+              {isPatient ? <Heart size={32} /> : <Stethoscope size={32} />}
+            </motion.div>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">HealthSphere</h1>
-          <p className="text-slate-500 mt-2 font-medium">Your Health, Centralized.</p>
+          <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: "#0F172A" }}>HealthSphere</h1>
+          <p className="mt-2 font-medium" style={{ color: "#64748B" }}>Your Health, Centralized.</p>
         </div>
 
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8">
-          <button 
-            type="button"
-            onClick={() => setRole("patient")}
-            className={`flex items-center justify-center gap-2 flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${role === "patient" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <UserRound size={16} /> Patient
-          </button>
-          <button 
-            type="button"
-            onClick={() => setRole("doctor")}
-            className={`flex items-center justify-center gap-2 flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${role === "doctor" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <Stethoscope size={16} /> Doctor
-          </button>
+        {/* Role toggle — visually themed */}
+        <div className="flex p-1.5 rounded-2xl mb-8" style={{ background: "#F1F5F9" }}>
+          {(["patient", "doctor"] as const).map(r => {
+            const isActive = role === r;
+            const RoleIcon = r === "patient" ? UserRound : Stethoscope;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                className="flex items-center justify-center gap-2 flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 relative"
+                style={isActive ? {
+                  background: "#FFFFFF",
+                  color: theme.tabActive,
+                  boxShadow: `0 2px 8px ${theme.shadow}`,
+                } : {
+                  color: "#94A3B8",
+                }}
+              >
+                <RoleIcon size={16} />
+                {r === "patient" ? "Patient" : "Doctor"}
+              </button>
+            );
+          })}
         </div>
 
+        {/* Form */}
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: "#334155" }}>Email Address</label>
             <input 
               type="email" 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 outline-none transition-all font-medium placeholder:text-slate-400"
+              className="w-full px-4 py-3.5 rounded-xl border outline-none transition-all font-medium"
+              style={{ borderColor: "#E2E8F0", background: "rgba(255,255,255,0.5)" }}
+              onFocus={e => { e.target.style.borderColor = theme.primary; e.target.style.boxShadow = `0 0 0 3px ${theme.ringFocus}`; e.target.style.background = "#FFFFFF"; }}
+              onBlur={e => { e.target.style.borderColor = "#E2E8F0"; e.target.style.boxShadow = "none"; e.target.style.background = "rgba(255,255,255,0.5)"; }}
               placeholder="name@example.com"
             />
           </div>
           
           <div className="relative">
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: "#334155" }}>Password</label>
             <div className="relative">
               <input 
                 type={showPassword ? "text" : "password"} 
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 outline-none transition-all font-medium placeholder:text-slate-400"
+                className="w-full px-4 py-3.5 rounded-xl border outline-none transition-all font-medium"
+                style={{ borderColor: "#E2E8F0", background: "rgba(255,255,255,0.5)" }}
+                onFocus={e => { e.target.style.borderColor = theme.primary; e.target.style.boxShadow = `0 0 0 3px ${theme.ringFocus}`; e.target.style.background = "#FFFFFF"; }}
+                onBlur={e => { e.target.style.borderColor = "#E2E8F0"; e.target.style.boxShadow = "none"; e.target.style.background = "rgba(255,255,255,0.5)"; }}
                 placeholder="••••••••"
               />
               <button 
                 type="button" 
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors"
+                style={{ color: "#94A3B8" }}
+                onMouseEnter={e => e.currentTarget.style.color = theme.primary}
+                onMouseLeave={e => e.currentTarget.style.color = "#94A3B8"}
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
           </div>
 
-          {error && <p className="text-red-500 text-sm font-medium text-center">{error}</p>}
+          {error && (
+            <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-red-500 text-sm font-medium text-center bg-red-50 rounded-xl py-2 px-3 border border-red-100">
+              {error}
+            </motion.p>
+          )}
 
           <motion.button 
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-600/30 mt-2"
+            className="w-full text-white font-semibold py-3.5 rounded-xl transition-all mt-2 disabled:opacity-60"
+            style={{ background: theme.gradient, boxShadow: `0 4px 15px ${theme.shadow}` }}
           >
-            {loading ? "Signing In..." : `Sign In as ${role === "patient" ? "Patient" : "Doctor"}`}
+            {loading ? "Signing In..." : `Sign In as ${isPatient ? "Patient" : "Doctor"}`}
           </motion.button>
           
           <button 
             type="button" 
             onClick={handleGoogleLogin}
-            className="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3.5 rounded-xl transition-all mt-2 flex justify-center items-center gap-2"
+            className="w-full bg-white hover:bg-slate-50 border font-semibold py-3.5 rounded-xl transition-all mt-2 flex justify-center items-center gap-2 card-hover"
+            style={{ borderColor: "#E2E8F0", color: "#334155" }}
           >
             <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571.001-.001.002-.001.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
             Sign in with Google
           </button>
         </form>
 
-        <p className="text-center text-slate-500 font-medium text-sm mt-8">
-          Don't have an account? <Link href="/register" className="text-blue-600 hover:text-blue-700 transition-colors">Register here</Link>
-        </p>
+        {/* Footer link */}
+        <div className="flex items-center justify-center gap-2 mt-8">
+          <Shield size={14} style={{ color: "#94A3B8" }}/>
+          <p className="text-sm font-medium" style={{ color: "#64748B" }}>
+            Don't have an account? <Link href="/register" className="font-semibold transition-colors" style={{ color: theme.primary }}>Register here</Link>
+          </p>
+        </div>
       </motion.div>
     </div>
   );

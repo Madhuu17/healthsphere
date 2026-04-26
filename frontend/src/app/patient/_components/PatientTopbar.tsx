@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Calendar as CalendarIcon, FileText, Pill, Activity, Mail, LayoutDashboard, Salad } from "lucide-react";
+import { Calendar as CalendarIcon, FileText, Pill, Activity, Mail, LayoutDashboard, Salad, Brain } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePatient } from "../_context/PatientContext";
 import LanguageSwitcher from "../../../components/LanguageSwitcher";
@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, { label: string; icon: any }> = {
   "/patient/medications":     { label: "Medications",     icon: Pill },
   "/patient/timeline":        { label: "Timeline",        icon: Activity },
   "/patient/diet-plan":       { label: "Diet Plan",       icon: Salad },
+  "/patient/health-report":   { label: "Health Report",   icon: Brain },
   "/patient/messages":        { label: "Messages",        icon: Mail },
 };
 
@@ -45,21 +46,37 @@ export default function PatientTopbar() {
   const PageIcon = page.icon;
 
   return (
-    <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between shrink-0">
+    <header
+      className="px-8 py-4 flex items-center justify-between shrink-0 border-b"
+      style={{
+        background: "rgba(255, 255, 255, 0.85)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderColor: "rgba(209, 250, 229, 0.5)",
+      }}
+    >
       {/* Left: page title */}
       <div className="flex items-center gap-3">
-        <PageIcon size={20} className="text-teal-500" />
-        <span className="text-lg font-black text-slate-800 tracking-tight">{page.label}</span>
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ background: "linear-gradient(135deg, #10B981, #06B6D4)" }}
+        >
+          <PageIcon size={15} className="text-white" />
+        </div>
+        <span className="text-lg font-black tracking-tight" style={{ color: "#064E3B" }}>{page.label}</span>
       </div>
 
       {/* Right: date chip + calendar + notifications + avatar */}
       <div className="flex items-center gap-3">
-        {/* Current date chip – DD-MM-YYYY */}
-        <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full px-4 py-2 text-sm font-semibold text-slate-600">
-          <CalendarIcon size={14} className="text-teal-500" />
+        {/* Current date chip */}
+        <div
+          className="hidden md:flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+          style={{ background: "#F0FDF4", border: "1px solid #D1FAE5", color: "#065F46" }}
+        >
+          <CalendarIcon size={14} style={{ color: "#10B981" }} />
           <span>{todayFormatted()}</span>
-          <span className="text-slate-300">·</span>
-          <span className="text-teal-500 font-bold">{nowTime()}</span>
+          <span style={{ color: "#A7F3D0" }}>·</span>
+          <span className="font-bold" style={{ color: "#10B981" }}>{nowTime()}</span>
         </div>
 
         <LanguageSwitcher />
@@ -67,11 +84,14 @@ export default function PatientTopbar() {
         {/* Calendar icon button */}
         <button
           onClick={() => setShowCalendar(true)}
-          className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-500 hover:bg-teal-50 hover:text-teal-600 transition-colors relative"
+          className="w-10 h-10 bg-white rounded-full flex items-center justify-center transition-all duration-200 relative card-hover"
+          style={{ border: "1px solid #D1FAE5", color: "#6B7280" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#F0FDF4"; e.currentTarget.style.color = "#10B981"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "#FFFFFF"; e.currentTarget.style.color = "#6B7280"; }}
         >
           <CalendarIcon size={18} />
           {scheduled.length > 0 && (
-            <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-teal-400 border-2 border-white rounded-full" />
+            <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white" style={{ background: "#10B981" }} />
           )}
         </button>
 
@@ -79,44 +99,59 @@ export default function PatientTopbar() {
         <div className="relative">
           <button
             onClick={() => setShowMessages(!showMessages)}
-            className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 relative"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white relative shadow-md transition-all duration-200"
+            style={{ background: "linear-gradient(135deg, #10B981, #06B6D4)", boxShadow: "0 4px 12px rgba(16, 185, 129, 0.25)" }}
           >
             <Mail size={18} />
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-orange-400 border-2 border-white rounded-full text-[8px] font-bold flex items-center justify-center text-white">
+            <span
+              className="absolute -top-0.5 -right-0.5 w-4 h-4 border-2 border-white rounded-full text-[8px] font-bold flex items-center justify-center text-white"
+              style={{ background: "#F97316" }}
+            >
               {messages.filter((m: any) => m.isNew).length}
             </span>
           </button>
           <AnimatePresence>
             {showMessages && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-4 z-50"
+                initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute right-0 mt-3 w-80 glass rounded-3xl shadow-2xl p-4 z-50"
+                style={{ border: "1px solid rgba(209, 250, 229, 0.5)" }}
               >
                 <div className="flex items-center justify-between mb-4 px-2">
-                  <h4 className="font-bold text-slate-800">Messages & Notifications</h4>
-                  <button onClick={() => markAllRead()} className="text-[10px] font-bold text-teal-600 uppercase tracking-widest">Mark All Read</button>
+                  <h4 className="font-bold" style={{ color: "#064E3B" }}>Messages & Notifications</h4>
+                  <button onClick={() => markAllRead()} className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#10B981" }}>Mark All Read</button>
                 </div>
-                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
                   {messages.map((m: any) => (
                     <div
                       key={m.id}
                       onClick={() => markOneRead(m)}
-                      className={`p-3 rounded-2xl border transition-all cursor-pointer ${m.isNew ? "bg-teal-50/50 border-teal-100 hover:bg-teal-50" : "bg-slate-50 border-slate-100 opacity-75"}`}
+                      className="p-3 rounded-2xl border transition-all cursor-pointer card-hover"
+                      style={m.isNew
+                        ? { background: "#F0FDF4", borderColor: "#D1FAE5" }
+                        : { background: "#F8FAFC", borderColor: "#E5E7EB", opacity: 0.75 }
+                      }
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${m.type === "appointment" ? "bg-teal-100 text-teal-600" : "bg-purple-100 text-purple-600"}`}>
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                          style={m.type === "appointment"
+                            ? { background: "#D1FAE5", color: "#059669" }
+                            : { background: "#EDE9FE", color: "#7C3AED" }
+                          }
+                        >
                           {m.type === "appointment" ? <CalendarIcon size={14} /> : <Pill size={14} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-slate-800 leading-normal">{m.text}</p>
-                          <span className="text-[10px] text-slate-400 font-medium mt-1 inline-block">{formatDate(m.date)}</span>
+                          <p className="text-xs font-semibold leading-normal" style={{ color: "#0F172A" }}>{m.text}</p>
+                          <span className="text-[10px] font-medium mt-1 inline-block" style={{ color: "#94A3B8" }}>{formatDate(m.date)}</span>
                         </div>
-                        {m.isNew && <div className="w-2 h-2 bg-orange-400 rounded-full mt-1" />}
+                        {m.isNew && <div className="w-2 h-2 rounded-full mt-1" style={{ background: "#F97316" }} />}
                       </div>
                     </div>
                   ))}
                   {messages.length === 0 && (
-                    <p className="text-center text-slate-400 text-xs py-6 font-medium">No new notifications</p>
+                    <p className="text-center text-xs py-6 font-medium" style={{ color: "#94A3B8" }}>No new notifications</p>
                   )}
                 </div>
               </motion.div>
@@ -127,7 +162,8 @@ export default function PatientTopbar() {
         {/* Avatar */}
         <button
           onClick={() => setShowSettings(true)}
-          className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 border-2 border-white shadow-sm ml-1 flex items-center justify-center text-white font-bold text-sm hover:scale-110 transition-transform overflow-hidden"
+          className="w-10 h-10 rounded-full border-2 border-white shadow-md ml-1 flex items-center justify-center text-white font-bold text-sm hover:scale-110 transition-transform overflow-hidden"
+          style={{ background: "linear-gradient(135deg, #10B981, #059669)" }}
         >
           {profile.profilePicture ? (
             <img src={profile.profilePicture} alt="Avatar" className="w-full h-full object-cover" />

@@ -14,7 +14,7 @@ export default function DoctorLayout({ children }: { children: ReactNode }) {
 
   if (!isDashboardRoute) {
     return (
-      <div style={{ background: "#f8fafc", minHeight: "100vh", fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+      <div style={{ background: "#F8FAFC", minHeight: "100vh", fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
         {children}
       </div>
     );
@@ -22,9 +22,14 @@ export default function DoctorLayout({ children }: { children: ReactNode }) {
 
   return (
     <DoctorProvider>
-      <div className="min-h-screen bg-slate-50" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <div className="min-h-screen relative" style={{ background: "#F8FAFC", fontFamily: "'Inter', sans-serif" }}>
+        {/* Subtle radial highlight — top-right corner */}
+        <div
+          className="fixed top-0 right-0 w-[600px] h-[600px] pointer-events-none z-0"
+          style={{ background: "radial-gradient(circle at top right, rgba(37,99,235,0.04) 0%, transparent 60%)" }}
+        />
         <DoctorSidebar />
-        <div className="ml-64 min-h-screen">
+        <div className="ml-64 min-h-screen relative z-10">
           <DoctorTopbar />
           <div className="p-8">
             {children}

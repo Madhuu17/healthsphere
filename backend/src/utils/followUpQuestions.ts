@@ -15,8 +15,9 @@ Rules:
 - Questions must be directly related to the reported symptoms
 - Keep each question SHORT (one sentence, max 15 words)
 - Do NOT ask for name, email, or any personal identifiable information
+- Do NOT ask the patient to rate their pain on any scale (e.g., 1-10).
 - All questions must be optional for the patient to answer
-- Cover aspects like: duration, intensity, other concurrent symptoms, medication taken, relevant history
+- Cover aspects like: duration, other concurrent symptoms, medication taken, relevant history
 - Respond ONLY with a valid JSON array of strings, no markdown, no extra text
 
 Example format:
